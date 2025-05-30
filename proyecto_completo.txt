@@ -1,0 +1,2608 @@
+
+
+===== ./.gitignore =====
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignorar entornos virtuales comunes
+venv/
+env/
+ENV/
+
+# Ignorar archivos de configuración de editores
+.vscode/
+.idea/
+
+# Ignorar archivos del sistema
+.DS_Store
+Thumbs.db
+
+===== ./main.py =====
+
+"""
+Visualizador de Algoritmos Genéticos
+-----------------------------------
+Aplicación para visualizar el funcionamiento de algoritmos genéticos
+en la resolución de problemas de optimización de funciones.
+"""
+import tkinter as tk
+from tkinter import ttk, messagebox  # Importar messagebox aquí
+from ui.main_window import MainWindow
+# from example_ga.genetic_algorithm import GeneticAlgorithm # Ya no se importa directamente aquí
+
+# Importar el gestor de AGs
+from manager.ga_manager import get_ga_instance, get_available_ga_names
+
+# Variable global para seleccionar el AG a usar.
+# Esto podría venir de una configuración, un argumento de línea de comandos, o una selección en la GUI en el futuro.
+SELECTED_GA_NAME = "example_ga"  # O "standard_ga" para probar el otro
+
+def execute_specific_ga(params: dict, root_tk_window=None, algorithm_name: str = SELECTED_GA_NAME):
+    """
+    Esta función ejecuta un AG específico y devuelve los resultados
+    en el formato esperado por MainWindow.
+
+    Args:
+        params (dict): Diccionario con los parámetros de configuración de la GUI.
+                       Debe contener: 'interval_a', 'interval_b', 'delta_x',
+                       'pop_size', 'num_generations', 'prob_crossover',
+                       'prob_mutation_i', 'prob_mutation_g', 'is_minimizing'.
+        root_tk_window (tk.Tk, optional): Ventana raíz de Tkinter, por si el AG
+                                         necesita mostrar diálogos de progreso.
+        algorithm_name (str): Nombre del algoritmo a ejecutar, registrado en ga_manager.
+
+    Returns:
+        dict: Un diccionario con los resultados del AG, con las claves:
+              'ga_results', 'population_history', 'fitness_history', 'best_fitness_history'.
+              Retorna None si la ejecución falla.
+    """
+    print(f"Solicitando ejecución del AG: '{algorithm_name}'")
+    print("Recibidos parámetros para el AG:", params)
+
+    try:
+        # Obtener una instancia del AG seleccionado desde el manager
+        ga_instance = get_ga_instance(algorithm_name)
+    except ValueError as e:
+        tk.messagebox.showerror("Error de Configuración", f"No se pudo cargar el AG: {e}")
+        print(f"Error cargando el AG: {e}")
+        return None
+
+    try:
+        results = ga_instance.run(
+            x_min=params['interval_a'],
+            x_max=params['interval_b'],
+            delta_x=params['delta_x'],
+            pop_size=params['pop_size'],
+            max_generations=params['num_generations'],
+            prob_crossover=params['prob_crossover'],
+            prob_mutation_i=params['prob_mutation_i'],
+            prob_mutation_g=params['prob_mutation_g'],
+            is_minimizing=params['is_minimizing'],
+            progress_root_window=root_tk_window  # Pasar la ventana raíz para el progreso
+        )
+        return results
+    except Exception as e:
+        tk.messagebox.showerror("Error en AG", f"Falló la ejecución del AG '{algorithm_name}': {e}")
+        print(f"Error ejecutando el AG '{algorithm_name}': {e}")
+        import traceback
+        traceback.print_exc()  # Para más detalles en la consola
+        return None
+
+def main():
+    """Punto de entrada principal de la aplicación"""
+    
+    # Aquí podrías eventualmente tener una lógica para seleccionar SELECTED_GA_NAME
+    # Por ejemplo, desde la interfaz de usuario o argumentos de línea de comandos.
+    # Por ahora, está hardcodeado arriba.
+    print(f"Nombres de AGs disponibles: {get_available_ga_names()}")
+    print(f"AG seleccionado para esta sesión: {SELECTED_GA_NAME}")
+
+    if SELECTED_GA_NAME not in get_available_ga_names():
+        print(f"Error: El AG '{SELECTED_GA_NAME}' no está registrado. Usando 'example_ga' por defecto.")
+        actual_ga_to_use = "example_ga"
+        if "example_ga" not in get_available_ga_names():  # Fallback extremo
+            messagebox.showerror("Error Crítico", "No hay ningún AG 'example_ga' registrado. La aplicación no puede continuar.")
+            return
+    else:
+        actual_ga_to_use = SELECTED_GA_NAME
+
+    app = MainWindow()
+    
+    # Creamos una función lambda para que el executor tenga el nombre del AG fijado.
+    # La función que espera MainWindow no toma `algorithm_name` directamente.
+    configured_ga_executor = lambda p, r: execute_specific_ga(p, r, algorithm_name=actual_ga_to_use)
+    
+    app.set_ga_executor(configured_ga_executor)
+    app.run()
+
+if __name__ == "__main__":
+    main()
+
+===== ./ui/__init__.py =====
+
+
+
+===== ./ui/config_panel.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Panel de configuración de la aplicación
+"""
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import numpy as np
+from utils.math_functions import set_function_provider  # Para asegurar que el provider global se actualice
+
+class ConfigPanel:
+    """Clase que maneja el panel de configuración (izquierdo)"""
+    
+    # Se le pasa el function_provider desde MainWindow
+    def __init__(self, parent, main_window, function_provider_instance):
+        self.parent = parent
+        self.main_window = main_window
+        self.function_provider = function_provider_instance  # Usar el provider de MainWindow
+        set_function_provider(self.function_provider)  # Asegurarse de que math_functions use este provider
+        
+        self.interval_a = tk.DoubleVar(value=-43.90)
+        self.interval_b = tk.DoubleVar(value=-35.70)
+        self.delta_x = tk.DoubleVar(value=0.08)
+        self.pop_size = tk.IntVar(value=20)
+        self.num_generations = tk.IntVar(value=100)
+        self.prob_crossover = tk.DoubleVar(value=0.90)
+        self.prob_mutation_i = tk.DoubleVar(value=0.25)
+        self.prob_mutation_g = tk.DoubleVar(value=0.25)
+        self.is_minimizing = tk.BooleanVar(value=True)
+        self.num_points = tk.StringVar(value="...")
+        self.num_bits = tk.StringVar(value="...")
+        self.max_decimal = tk.StringVar(value="...")
+        self.selected_graph = tk.StringVar(value="none")
+        self.graph_buttons = []
+        
+        self.create_config_panel()
+        self.update_function_display()  # Para mostrar la función inicial del provider
+        self.update_calculated_values()
+        
+    def open_function_editor(self):
+        from ui.function_editor import FunctionEditor
+        
+        def on_function_accept(function_text, compiled_function):
+            self.function_provider.set_function(function_text, compiled_function)
+            set_function_provider(self.function_provider)  # Actualizar el provider global
+            self.update_function_display()
+            messagebox.showinfo("Función Actualizada", 
+                              "La función objetivo ha sido actualizada para el visualizador y el AG de ejemplo.")
+        
+        FunctionEditor(self.parent, on_function_accept, initial_function=self.function_provider.function_text)
+    
+    def update_function_display(self):
+        function_text = self.function_provider.function_text
+        display_text = function_text.replace('*', '·')
+        self.function_display.config(text=f"f(x) = {display_text}")
+    
+    def create_config_panel(self):
+        canvas = tk.Canvas(self.parent, bg='white', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='white')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        title_label = tk.Label(scrollable_frame, text="Configuración", 
+                              font=("Arial", 16, "bold"), bg='white')
+        title_label.pack(pady=10)
+        
+        function_frame = tk.LabelFrame(scrollable_frame, text="Función Objetivo (para AG de Ejemplo y Visualizador)", 
+                                    font=("Arial", 12, "bold"), 
+                                    bg='white', padx=10, pady=10)
+        function_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.function_display = tk.Label(function_frame, 
+                                        text="",  # Se actualizará en update_function_display
+                                        font=("Consolas", 10), bg='white',
+                                        wraplength=380, justify="left")
+        self.function_display.pack(fill="x", pady=5)
+        
+        edit_function_btn = tk.Button(function_frame, text="Editar Función", 
+                                    command=self.open_function_editor,
+                                    bg='#2196F3', fg='white', 
+                                    font=("Arial", 11, "bold"))
+        edit_function_btn.pack(fill="x", pady=5)
+        
+        config_frame = tk.LabelFrame(scrollable_frame, text="Parámetros (para AG de Ejemplo)", 
+                                    font=("Arial", 12, "bold"), 
+                                    bg='white', padx=10, pady=10)
+        config_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.create_labeled_entry(config_frame, "Intervalo A:", self.interval_a)
+        self.create_labeled_entry(config_frame, "Intervalo B:", self.interval_b)
+        self.create_labeled_entry(config_frame, "Δx:", self.delta_x)
+        self.create_labeled_entry(config_frame, "Población:", self.pop_size)
+        self.create_labeled_entry(config_frame, "Generaciones:", self.num_generations)
+        self.create_labeled_entry(config_frame, "Prob. Cruzamiento:", self.prob_crossover)
+        self.create_labeled_entry(config_frame, "PMI (Individuo):", self.prob_mutation_i)
+        self.create_labeled_entry(config_frame, "PMG (Gen):", self.prob_mutation_g)
+        
+        optimization_frame = tk.Frame(config_frame, bg='white')
+        optimization_frame.pack(fill="x", pady=5)
+        tk.Label(optimization_frame, text="Modo de optimización:", 
+                bg='white', font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Radiobutton(optimization_frame, text="Minimizar", variable=self.is_minimizing, 
+                      value=True, bg='white').pack(side="left", padx=5)
+        tk.Radiobutton(optimization_frame, text="Maximizar", variable=self.is_minimizing, 
+                      value=False, bg='white').pack(side="left", padx=5)
+        
+        info_frame = tk.LabelFrame(config_frame, text="Parámetros Calculados", 
+                                  font=("Arial", 10, "bold"), bg='white')
+        info_frame.pack(fill="x", pady=10)
+        self.create_info_display(info_frame, "# Puntos:", self.num_points)
+        self.create_info_display(info_frame, "# Bits:", self.num_bits)
+        self.create_info_display(info_frame, "Máx. Decimal:", self.max_decimal)
+        
+        execute_btn = tk.Button(config_frame, text="EJECUTAR AG DE EJEMPLO",
+                               command=self.run_example_algorithm_from_config,
+                               bg='#4CAF50', fg='white', 
+                               font=("Arial", 12, "bold"),
+                               height=2)
+        execute_btn.pack(fill="x", pady=20)
+        
+        separator = tk.Frame(scrollable_frame, height=2, bg='gray')
+        separator.pack(fill="x", padx=10, pady=10)
+        
+        graph_frame = tk.LabelFrame(scrollable_frame, text="Seleccionar Gráfica", 
+                                   font=("Arial", 12, "bold"), 
+                                   bg='white', padx=10, pady=10)
+        graph_frame.pack(fill="x", padx=10, pady=5)
+        self.create_graph_button(graph_frame, "Función Objetivo", "objective")
+        self.create_graph_button(graph_frame, "Evolución Mejor", "evolution_best")
+        self.create_graph_button(graph_frame, "Evolución Población", "evolution_all")
+        self.animation_btn = tk.Button(graph_frame, text="Evolución Animada", 
+                                     command=self.start_animation,
+                                     bg='white', relief='raised', bd=2,
+                                     font=("Arial", 11), height=2,
+                                     activebackground='#e0e0e0')
+        self.animation_btn.pack(fill="x", pady=5)
+        self.graph_buttons.append(self.animation_btn)
+        
+        actions_frame = tk.LabelFrame(scrollable_frame, text="Acciones", 
+                                     font=("Arial", 12, "bold"), 
+                                     bg='white', padx=10, pady=10)
+        actions_frame.pack(fill="x", padx=10, pady=5)
+        self.report_btn = tk.Button(actions_frame, text="Generar Reporte", 
+                                   command=self.generate_report,
+                                   bg='#FF9800', fg='white', 
+                                   font=("Arial", 11, "bold"), height=1)
+        self.report_btn.pack(fill="x", pady=5)
+        self.download_animation_btn = tk.Button(actions_frame, text="Descargar Animación", 
+                                             command=self.save_animation,
+                                             bg='#2196F3', fg='white', 
+                                             font=("Arial", 11, "bold"), height=1)
+        self.download_animation_btn.pack(fill="x", pady=5)
+        clear_btn = tk.Button(actions_frame, text="Limpiar Resultados", 
+                             command=self.clear_results,
+                             bg='#f44336', fg='white', 
+                             font=("Arial", 11, "bold"), height=1)
+        clear_btn.pack(fill="x", pady=5)
+        
+        self.disable_buttons()
+        for var in [self.interval_a, self.interval_b, self.delta_x]:
+            var.trace('w', lambda *args: self.update_calculated_values())
+    
+    def create_labeled_entry(self, parent, label, variable):
+        frame = tk.Frame(parent, bg='white')
+        frame.pack(fill="x", pady=2)
+        tk.Label(frame, text=label, bg='white', width=20, anchor="w").pack(side="left")
+        tk.Entry(frame, textvariable=variable, width=15).pack(side="right")
+    
+    def create_info_display(self, parent, label, variable):
+        frame = tk.Frame(parent, bg='white')
+        frame.pack(fill="x", pady=1)
+        tk.Label(frame, text=label, bg='white', width=15, anchor="w").pack(side="left")
+        info_label = tk.Label(frame, textvariable=variable, bg='#f0f0f0', 
+                             relief="sunken", bd=1, width=15)
+        info_label.pack(side="right")
+
+    def create_graph_button(self, parent, text, value):
+        btn = tk.Button(parent, text=text, 
+                       command=lambda: self.show_graph(value),
+                       bg='white', relief='raised', bd=2,
+                       font=("Arial", 11), height=2,
+                       activebackground='#e0e0e0')
+        btn.pack(fill="x", pady=5)
+        self.graph_buttons.append(btn)
+
+    def update_calculated_values(self):
+        try:
+            try:
+                x_min = float(self.interval_a.get())
+                x_max = float(self.interval_b.get())
+                delta_x = float(self.delta_x.get())
+            except (ValueError, tk.TclError):
+                self.num_points.set("...")
+                self.num_bits.set("...")
+                self.max_decimal.set("...")
+                return
+            
+            if x_max > x_min and delta_x > 0:
+                if x_min == 0 and x_max == 31:
+                    n_bits = 5
+                elif x_min >= 0 and x_max == int(x_max) and delta_x == 1.0:
+                    range_size = int(x_max - x_min) + 1
+                    n_bits = int(np.ceil(np.log2(range_size)))
+                else:
+                    num_divisions = int((x_max - x_min) / delta_x)
+                    n_bits = int(np.ceil(np.log2(num_divisions + 1)))
+                
+                max_decimal = 2**n_bits - 1
+                num_points = max_decimal + 1
+                
+                self.num_points.set(str(num_points))
+                self.num_bits.set(str(n_bits))
+                self.max_decimal.set(str(max_decimal))
+            else:
+                self.num_points.set("...")
+                self.num_bits.set("...")
+                self.max_decimal.set("...")
+        except Exception as e:
+            self.num_points.set("...")
+            self.num_bits.set("...")
+            self.max_decimal.set("...")
+
+    def enable_buttons(self):
+        for btn in self.graph_buttons:
+            btn.config(state="normal")
+        self.report_btn.config(state="normal")
+        self.download_animation_btn.config(state="normal")
+
+    def disable_buttons(self):
+        for btn in self.graph_buttons:
+            btn.config(state="disabled")
+        self.report_btn.config(state="disabled")
+        self.download_animation_btn.config(state="disabled")
+
+    def update_button_selection(self, selected_type):
+        button_mapping = {
+            "objective": 0,
+            "evolution_best": 1,
+            "evolution_all": 2
+        }
+        for i, btn in enumerate(self.graph_buttons[:-1]):
+            if i == button_mapping.get(selected_type, -1):
+                btn.config(bg='#cce0ff', relief='sunken')
+            else:
+                btn.config(bg='white', relief='raised')
+        self.animation_btn.config(text="Evolución Animada", bg='white')
+    
+    def run_example_algorithm_from_config(self):
+        """Recoge los parámetros y solicita la ejecución del AG de ejemplo"""
+        x_min = self.interval_a.get()
+        x_max = self.interval_b.get()
+        delta_x = self.delta_x.get()
+        
+        if x_min >= x_max:
+            tk.messagebox.showerror("Error", "El intervalo [a,b] no es válido. a debe ser menor que b.")
+            return
+        if delta_x <= 0:
+            tk.messagebox.showerror("Error", "Δx debe ser mayor que 0.")
+            return
+        
+        params = {
+            'interval_a': x_min, 'interval_b': x_max, 'delta_x': delta_x,
+            'pop_size': self.pop_size.get(), 
+            'num_generations': self.num_generations.get(),
+            'prob_crossover': self.prob_crossover.get(),
+            'prob_mutation_i': self.prob_mutation_i.get(),
+            'prob_mutation_g': self.prob_mutation_g.get(),
+            'is_minimizing': self.is_minimizing.get()
+        }
+        self.main_window.run_example_algorithm(params)
+    
+    def show_graph(self, graph_type):
+        if not self.main_window.ga_results:
+            tk.messagebox.showwarning("Advertencia", "Primero debe ejecutar el AG de ejemplo o cargar resultados.")
+            return
+        self.update_button_selection(graph_type)
+        self.main_window.visualization_panel.show_graph(
+            graph_type, 
+            self.main_window.ga_results, 
+            self.main_window.population_history, 
+            self.main_window.fitness_history, 
+            self.main_window.best_fitness_history
+        )
+    
+    def start_animation(self):
+        if not self.main_window.ga_results:
+            tk.messagebox.showwarning("Advertencia", "Primero debe ejecutar el AG de ejemplo o cargar resultados.")
+            return
+        if self.animation_btn.cget('text') == "Evolución Animada":
+            self.animation_btn.config(text="Detener Animación", bg='#ffcccc')
+            for btn in self.graph_buttons[:-1]:
+                btn.config(bg='white', relief='raised')
+            self.main_window.visualization_panel.start_animation(
+                self.main_window.best_fitness_history,
+                self.main_window.ga_results['is_minimizing']
+            )
+        else:
+            self.animation_btn.config(text="Evolución Animada", bg='white')
+            self.main_window.visualization_panel.stop_animation()
+
+    def generate_report(self):
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Guardar Reporte"
+        )
+        if not filename: return
+        success = self.main_window.generate_report(filename)
+        if success:
+            if hasattr(self.main_window.report_generator, 'open_file'):
+                self.main_window.report_generator.open_file(filename)
+            else:
+                try:
+                    import os, subprocess
+                    if os.name == 'nt': os.startfile(filename)
+                    else: subprocess.call(('open', filename) if os.uname().sysname == 'Darwin' else ('xdg-open', filename))
+                except Exception as e:
+                    messagebox.showwarning("Abrir archivo", f"No se pudo abrir el reporte automáticamente: {e}")
+
+    def save_animation(self):
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".mp4",
+            filetypes=[("MP4 files", "*.mp4"), ("GIF files", "*.gif"), ("All files", "*.*")],
+            title="Guardar Animación"
+        )
+        if not filename: return
+        self.main_window.save_animation(filename)
+
+    def clear_results(self):
+        self.main_window.clear_results()
+
+===== ./ui/function_editor.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Editor de funciones con teclado virtual
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+import re
+import numpy as np
+from sympy import symbols, sympify, lambdify, SympifyError
+
+class FunctionEditor:
+    """Editor de funciones con teclado virtual"""
+    
+    # Añadir initial_function
+    def __init__(self, parent, callback_function=None, initial_function=None):
+        """
+        Inicializa el editor de funciones
+        
+        Args:
+            parent: Widget padre
+            callback_function: Función a llamar cuando se acepta una función
+            initial_function: Texto de función inicial (opcional)
+        """
+        self.parent = parent
+        self.callback_function = callback_function
+        self.default_function = "ln(1+abs(x^7)) + π*cos(x) + sin(15.5*x)"
+        
+        # Usar initial_function si se provee, sino la default
+        current_initial = initial_function if initial_function is not None else self.default_function
+        self.current_function = tk.StringVar(value=current_initial)
+        
+        self.compiled_function = None
+        
+        # Crear la ventana de diálogo
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Editor de Funciones")
+        self.dialog.geometry("850x650")  # Aumentar el tamaño para asegurar visibilidad
+        self.dialog.minsize(800, 600)    # Establecer un tamaño mínimo
+        self.dialog.resizable(True, True)
+        self.dialog.configure(bg='#f5f5f5')
+        
+        # Hacer que la ventana sea modal
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Centrar en la pantalla
+        self.center_window()
+        
+        # Crear la interfaz
+        self.create_interface()
+        
+        # Validar la función inicial
+        self.validate_function()
+    
+    def center_window(self):
+        """Centra la ventana en la pantalla"""
+        self.dialog.update_idletasks()
+        width = self.dialog.winfo_width()
+        height = self.dialog.winfo_height()
+        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
+        self.dialog.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def create_interface(self):
+        """Crea la interfaz del editor de funciones"""
+        # Frame principal
+        main_frame = tk.Frame(self.dialog, bg='#f5f5f5')
+        main_frame.pack(fill="both", expand=True, padx=15, pady=15)
+        
+        # Crear un canvas y scrollbar para el scroll principal
+        canvas = tk.Canvas(main_frame, bg='#f5f5f5', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='#f5f5f5')
+        
+        # Configurar el scroll
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Permitir scroll con la rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind("<MouseWheel>", _on_mousewheel)  # Windows
+        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux
+        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))  # Linux
+        
+        # Empaquetar el canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Título
+        title_label = tk.Label(scrollable_frame, text="Editor de Función Objetivo", 
+                              font=("Arial", 16, "bold"), bg='#f5f5f5')
+        title_label.pack(pady=(0, 15))
+        
+        # Frame para el editor
+        editor_frame = tk.LabelFrame(scrollable_frame, text="Función f(x)", 
+                                    font=("Arial", 12, "bold"), 
+                                    bg='#f5f5f5', padx=10, pady=10)
+        editor_frame.pack(fill="x", pady=10)
+        
+        # Entrada de texto para la función
+        self.function_entry = tk.Entry(editor_frame, textvariable=self.current_function, 
+                                      font=("Consolas", 14), width=50)
+        self.function_entry.pack(fill="x", pady=5)
+        
+        # Frame para el teclado virtual
+        keyboard_frame = tk.LabelFrame(scrollable_frame, text="Teclado Virtual", 
+                                     font=("Arial", 12, "bold"), 
+                                     bg='#f5f5f5', padx=10, pady=10)
+        keyboard_frame.pack(fill="x", pady=10)
+        
+        # Crear el teclado virtual
+        self.create_virtual_keyboard(keyboard_frame)
+        
+        # Frame para la previsualización
+        preview_frame = tk.LabelFrame(scrollable_frame, text="Previsualización", 
+                                     font=("Arial", 12, "bold"), 
+                                     bg='#f5f5f5', padx=10, pady=10)
+        preview_frame.pack(fill="x", pady=10)
+        
+        # Label para mostrar la función en notación matemática
+        self.preview_label = tk.Label(preview_frame, text="", 
+                                     font=("Consolas", 14), bg='white', 
+                                     relief="sunken", bd=1)
+        self.preview_label.pack(fill="x", pady=5, ipady=5)
+        
+        # Frame para validación y botones
+        validation_frame = tk.Frame(scrollable_frame, bg='#f5f5f5')
+        validation_frame.pack(fill="x", pady=10)
+        
+        # Texto de validación
+        self.validation_text = tk.StringVar(value="")
+        validation_label = tk.Label(validation_frame, textvariable=self.validation_text, 
+                                   font=("Arial", 12), fg='green', bg='#f5f5f5')
+        validation_label.pack(side="left", padx=5)
+        
+        # Botones
+        button_frame = tk.Frame(scrollable_frame, bg='#f5f5f5')
+        button_frame.pack(fill="x", pady=10)
+        
+        reset_btn = tk.Button(button_frame, text="Restaurar Predeterminada", 
+                             command=self.reset_to_default,
+                             bg='#FF9800', fg='white', 
+                             font=("Arial", 11, "bold"),
+                             padx=10, pady=5)
+        reset_btn.pack(side="left", padx=5)
+        
+        validate_btn = tk.Button(button_frame, text="Validar Función", 
+                               command=self.validate_function,
+                               bg='#2196F3', fg='white', 
+                               font=("Arial", 11, "bold"),
+                               padx=10, pady=5)
+        validate_btn.pack(side="left", padx=5)
+        
+        cancel_btn = tk.Button(button_frame, text="Cancelar", 
+                             command=self.dialog.destroy,
+                             bg='#f44336', fg='white', 
+                             font=("Arial", 11, "bold"),
+                             padx=10, pady=5)
+        cancel_btn.pack(side="right", padx=5)
+        
+        accept_btn = tk.Button(button_frame, text="Aceptar", 
+                             command=self.accept_function,
+                             bg='#4CAF50', fg='white', 
+                             font=("Arial", 11, "bold"),
+                             padx=10, pady=5)
+        accept_btn.pack(side="right", padx=5)
+        
+        # Vincular eventos
+        self.current_function.trace('w', lambda *args: self.update_preview())
+        
+        # Actualizar previsualización inicial
+        self.update_preview()
+    
+    def create_virtual_keyboard(self, parent):
+        """Crea el teclado virtual con botones matemáticos"""
+        # Definir conjuntos de botones
+        operators = ['+', '-', '*', '/', '^', '=', '(', ')', ',', '.']
+        numbers = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0']
+        functions_trig = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot']
+        functions_other = ['exp', 'log', 'ln', 'sqrt', 'abs', 'sign']
+        functions_hyp = ['sinh', 'cosh', 'tanh']
+        constants = ['π', 'e', 'x', 'i']
+        
+        # Frame principal para el teclado - usando grid para mejor organización
+        keyboard_container = tk.Frame(parent, bg='#f5f5f5')
+        keyboard_container.pack(fill="x", pady=5)
+        
+        # Sección 1: Números y operadores básicos
+        basic_section = tk.LabelFrame(keyboard_container, text="Números y Operadores", 
+                                     bg='#f5f5f5', padx=10, pady=10)
+        basic_section.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        
+        # Contenedor para números
+        num_frame = tk.Frame(basic_section, bg='#f5f5f5')
+        num_frame.pack(side="left", padx=5)
+        
+        # Crear grid para números (estilo calculadora)
+        row, col = 0, 0
+        for num in numbers:
+            button = tk.Button(num_frame, text=num, width=4, height=2,
+                              command=lambda n=num: self.insert_text(n),
+                              font=("Arial", 12), bg='white', relief="raised",
+                              activebackground="#e0e0e0")
+            button.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            col += 1
+            if col > 2:
+                col = 0
+                row += 1
+        
+        # Contenedor para operadores básicos
+        op_frame = tk.Frame(basic_section, bg='#f5f5f5')
+        op_frame.pack(side="left", padx=5)
+        
+        # Crear grid para operadores
+        row, col = 0, 0
+        for op in operators:
+            button = tk.Button(op_frame, text=op, width=4, height=2,
+                              command=lambda o=op: self.insert_text(o),
+                              font=("Arial", 12), bg='#e0e0e0', relief="raised",
+                              activebackground="#d0d0d0")
+            button.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            col += 1
+            if col > 2:
+                col = 0
+                row += 1
+        
+        # Sección 2: Funciones trigonométricas
+        trig_section = tk.LabelFrame(keyboard_container, text="Funciones Trigonométricas", 
+                                    bg='#f5f5f5', padx=10, pady=10)
+        trig_section.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+        
+        # Frame para funciones trigonométricas
+        trig_frame = tk.Frame(trig_section, bg='#f5f5f5')
+        trig_frame.pack(fill="x", pady=5)
+        
+        # Crear botones de funciones en dos filas
+        row, col = 0, 0
+        for i, func in enumerate(functions_trig):
+            display_text = func + "()"
+                
+            button = tk.Button(trig_frame, text=display_text, width=6, height=2,
+                              command=lambda f=func: self.insert_function(f),
+                              font=("Arial", 11), bg='#d1e7f7', relief="raised",
+                              activebackground="#b0d4f1")
+            button.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            col += 1
+            if col > 2:  # 3 botones por fila
+                col = 0
+                row += 1
+        
+        # Frame para funciones hiperbólicas
+        hyp_frame = tk.Frame(trig_section, bg='#f5f5f5')
+        hyp_frame.pack(fill="x", pady=5)
+        
+        for i, func in enumerate(functions_hyp):
+            display_text = func + "()"
+                
+            button = tk.Button(hyp_frame, text=display_text, width=6, height=2,
+                              command=lambda f=func: self.insert_function(f),
+                              font=("Arial", 11), bg='#e1d7f7', relief="raised",
+                              activebackground="#c0b4d1")
+            button.grid(row=0, column=i, padx=2, pady=2, sticky="nsew")
+        
+        # Sección 3: Otras funciones
+        other_section = tk.LabelFrame(keyboard_container, text="Otras Funciones", 
+                                     bg='#f5f5f5', padx=10, pady=10)
+        other_section.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+        
+        # Frame para otras funciones
+        other_frame = tk.Frame(other_section, bg='#f5f5f5')
+        other_frame.pack(fill="x", pady=5)
+        
+        row, col = 0, 0
+        for i, func in enumerate(functions_other):
+            display_text = func
+            if func != 'abs' and func != 'sign':
+                display_text = func + "()"
+            else:
+                display_text = func + "()"
+                
+            button = tk.Button(other_frame, text=display_text, width=6, height=2,
+                              command=lambda f=func: self.insert_function(f),
+                              font=("Arial", 11), bg='#d7f7e1', relief="raised",
+                              activebackground="#b4d1c0")
+            button.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            col += 1
+            if col > 2:  # 3 botones por fila
+                col = 0
+                row += 1
+        
+        # Sección 4: Constantes y edición
+        const_edit_section = tk.LabelFrame(keyboard_container, text="Constantes y Edición", 
+                                         bg='#f5f5f5', padx=10, pady=10)
+        const_edit_section.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+        
+        # Contenedor para constantes
+        const_frame = tk.Frame(const_edit_section, bg='#f5f5f5')
+        const_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        
+        # Crear botones de constantes en una fila
+        for i, const in enumerate(constants):
+            button = tk.Button(const_frame, text=const, width=6, height=2,
+                              command=lambda c=const: self.insert_text(c),
+                              font=("Arial", 11), bg='#f7e6d1', relief="raised",
+                              activebackground="#f1d4b0")
+            button.grid(row=0, column=i, padx=2, pady=2, sticky="nsew")
+        
+        # Contenedor para botones de edición
+        edit_frame = tk.Frame(const_edit_section, bg='#f5f5f5')
+        edit_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        
+        # Crear botones de edición
+        backspace_btn = tk.Button(edit_frame, text="⌫ Retroceso", width=12, height=2,
+                                 command=self.backspace,
+                                 font=("Arial", 11), bg='#ffcccc', relief="raised",
+                                 activebackground="#ffaaaa")
+        backspace_btn.pack(side="left", padx=2, pady=2)
+        
+        clear_btn = tk.Button(edit_frame, text="Limpiar Todo", width=12, height=2,
+                             command=self.clear_entry,
+                             font=("Arial", 11), bg='#ffcccc', relief="raised",
+                             activebackground="#ffaaaa")
+        clear_btn.pack(side="left", padx=2, pady=2)
+        
+        # Configurar el comportamiento del grid
+        keyboard_container.columnconfigure(0, weight=1)
+        keyboard_container.columnconfigure(1, weight=1)
+        keyboard_container.rowconfigure(0, weight=1)
+        keyboard_container.rowconfigure(1, weight=1)
+    
+    def insert_text(self, text):
+        """Inserta texto en la posición del cursor"""
+        current_pos = self.function_entry.index(tk.INSERT)
+        self.function_entry.insert(current_pos, text)
+        self.function_entry.focus_set()
+    
+    def insert_function(self, func):
+        """Inserta una función con paréntesis en la posición del cursor"""
+        current_pos = self.function_entry.index(tk.INSERT)
+        if func in ['sin', 'cos', 'tan', 'exp', 'log', 'ln', 'sqrt']:
+            self.function_entry.insert(current_pos, f"{func}()")
+            # Mover el cursor dentro de los paréntesis
+            self.function_entry.icursor(current_pos + len(func) + 1)
+        else:
+            self.function_entry.insert(current_pos, f"{func}()")
+            # Mover el cursor dentro de los paréntesis
+            self.function_entry.icursor(current_pos + len(func) + 1)
+        
+        self.function_entry.focus_set()
+    
+    def backspace(self):
+        """Elimina el carácter anterior al cursor"""
+        current_pos = self.function_entry.index(tk.INSERT)
+        if current_pos > 0:
+            self.function_entry.delete(current_pos - 1, current_pos)
+        self.function_entry.focus_set()
+    
+    def clear_entry(self):
+        """Limpia toda la entrada de texto"""
+        self.function_entry.delete(0, tk.END)
+        self.function_entry.focus_set()
+    
+    def update_preview(self):
+        """Actualiza la previsualización de la función"""
+        # Obtener la función actual
+        func_text = self.current_function.get()
+        
+        # Reemplazar símbolos para mejor visualización
+        preview_text = func_text
+        preview_text = preview_text.replace('π', 'π')  # Asegurarse de que π se muestre correctamente
+        preview_text = preview_text.replace('*', '×')
+        preview_text = preview_text.replace('/', '÷')
+        preview_text = preview_text.replace('sqrt', '√')
+        
+        # Mostrar en la etiqueta de previsualización
+        self.preview_label.config(text=f"f(x) = {preview_text}")
+    
+    def reset_to_default(self):
+        """Restaura la función predeterminada"""
+        self.current_function.set(self.default_function)
+        self.validate_function()
+    
+    def validate_function(self):
+        """Valida la función ingresada"""
+        # Obtener la función actual
+        func_text = self.current_function.get()
+        
+        # Si está vacía
+        if not func_text.strip():
+            self.validation_text.set("⚠️ Ingrese una función válida")
+            self.preview_label.config(fg='red')
+            return False
+        
+        try:
+            # Preparar el texto para evaluación
+            # Reemplazar símbolos matemáticos
+            eval_text = func_text.replace('π', 'pi')
+            eval_text = eval_text.replace('^', '**')
+            eval_text = eval_text.replace('ln(', 'log(')
+            
+            # Usar sympy para validar la expresión
+            x = symbols('x')
+            expr = sympify(eval_text)
+            
+            # Convertir a una función lambda de numpy para evaluación rápida
+            self.compiled_function = lambdify(x, expr, ['numpy', {'ln': np.log, 'log': np.log10}])
+            
+            # Probar la función con un valor
+            test_value = 1.5
+            result = self.compiled_function(test_value)
+            
+            # Si el resultado es un número válido, la función es válida
+            if np.isfinite(result) and not np.isnan(result):
+                self.validation_text.set("✅ Función válida")
+                self.preview_label.config(fg='green')
+                return True
+            else:
+                self.validation_text.set("⚠️ La función produce valores no válidos")
+                self.preview_label.config(fg='red')
+                return False
+                
+        except SympifyError as e:
+            self.validation_text.set(f"❌ Error de sintaxis: {str(e)}")
+            self.preview_label.config(fg='red')
+            return False
+        except Exception as e:
+            self.validation_text.set(f"❌ Error: {str(e)}")
+            self.preview_label.config(fg='red')
+            return False
+    
+    def parse_function(self, x_value):
+        """Evalúa la función en un valor x dado"""
+        if self.compiled_function is None:
+            valid = self.validate_function()
+            if not valid:
+                return None
+        
+        try:
+            result = self.compiled_function(x_value)
+            return result
+        except Exception:
+            return None
+    
+    def accept_function(self):
+        """Acepta la función actual y cierra el diálogo"""
+        # Validar una última vez
+        valid = self.validate_function()
+        
+        if valid:
+            # Si hay una función de callback, llamarla
+            if self.callback_function:
+                self.callback_function(self.current_function.get(), self.compiled_function)
+            
+            # Cerrar el diálogo
+            self.dialog.destroy()
+        else:
+            # Mostrar mensaje de error
+            messagebox.showerror("Error de Validación", 
+                               "La función ingresada no es válida. Por favor corrija los errores.")
+
+
+class CustomFunctionProvider:
+    """Clase que proporciona una interfaz para funciones personalizadas"""
+    
+    def __init__(self):
+        """Inicializa el proveedor de funciones personalizadas"""
+        self.default_function_text = "ln(1+abs(x^7)) + π*cos(x) + sin(15.5*x)"
+        self.function_text = self.default_function_text
+        self.compiled_function = None
+        self.reset_to_default()  # Compilar la función predeterminada al inicio
+    
+    def set_function(self, function_text, compiled_function):
+        self.function_text = function_text
+        self.compiled_function = compiled_function
+    
+    def reset_to_default(self):
+        self.function_text = self.default_function_text
+        try:
+            import sympy
+            x = sympy.symbols('x')
+            eval_text = self.function_text.replace('π', 'pi').replace('^', '**')
+            expr = sympy.sympify(eval_text)
+            self.compiled_function = sympy.lambdify(
+                x, expr, modules=['numpy', {'ln': np.log, 'log': np.log10, 'abs': np.abs, 'sign': np.sign}]
+            )
+        except Exception as e:
+            print(f"Error compilando función predeterminada en provider: {e}")
+            self.compiled_function = None
+    
+    def _ensure_compiled(self):
+        """Asegura que la función esté compilada si es posible."""
+        if self.compiled_function is None and self.function_text:
+            try:
+                import sympy
+                x = sympy.symbols('x')
+                eval_text = self.function_text.replace('π', 'pi').replace('^', '**')
+                expr = sympy.sympify(eval_text)
+                self.compiled_function = sympy.lambdify(
+                    x, expr, modules=['numpy', {'ln': np.log, 'log': np.log10, 'abs': np.abs, 'sign': np.sign}]
+                )
+            except Exception as e:
+                print(f"Error recompilando función en provider: {e}")
+                self.compiled_function = None
+
+    def evaluate(self, x_val, is_minimizing=True):
+        self._ensure_compiled()
+        if self.compiled_function is None:
+            print("Advertencia: Usando función de evaluación de fallback (no compilada).")
+            return float('inf') if is_minimizing else float('-inf')
+        try:
+            result = self.compiled_function(x_val)
+            if not np.isfinite(result):
+                return float('inf') if is_minimizing else float('-inf')
+            return -result if is_minimizing else result
+        except Exception as e:
+            print(f"Error evaluando función '{self.function_text}' en x={x_val}: {e}")
+            return float('inf') if is_minimizing else float('-inf')
+    
+    def get_raw_function_value(self, x_val):
+        self._ensure_compiled()
+        if self.compiled_function is None:
+            print("Advertencia: Usando función raw de fallback (no compilada).")
+            return 0.0
+        try:
+            result = self.compiled_function(x_val)
+            if not np.isfinite(result):
+                return 0.0
+            return result
+        except Exception as e:
+            print(f"Error obteniendo raw value de '{self.function_text}' en x={x_val}: {e}")
+            return 0.0
+
+if __name__ == "__main__":
+    # Prueba del editor de funciones
+    root = tk.Tk()
+    root.title("Prueba del Editor de Funciones")
+    root.geometry("300x200")
+    
+    def test_callback(function_text, compiled_function):
+        print(f"Función aceptada: {function_text}")
+        if compiled_function:
+            print(f"Prueba de evaluación: f(2) = {compiled_function(2)}")
+    
+    btn = tk.Button(root, text="Abrir Editor", 
+                   command=lambda: FunctionEditor(root, test_callback))
+    btn.pack(padx=20, pady=20)
+    
+    root.mainloop()
+
+===== ./ui/main_window.py =====
+
+# ===== ./ui/main_window.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Ventana principal de la aplicación - Visualizador de Resultados de AG
+"""
+
+import tkinter as tk
+from tkinter import messagebox
+
+from ui.config_panel import ConfigPanel
+from ui.visualization_panel import VisualizationPanel
+from utils.export import ReportGenerator, AnimationGenerator
+from utils.math_functions import set_function_provider # Para actualizar el provider de la UI
+from ui.function_editor import CustomFunctionProvider # Para instanciar/actualizar el provider
+
+class MainWindow:
+    """Clase principal que maneja la ventana y coordina los componentes"""
+    
+    def __init__(self):
+        """Inicializa la ventana principal y sus componentes"""
+        self.root = tk.Tk()
+        self.root.title("Algoritmo Genético - Visualizador de Resultados")
+        self.root.geometry("1400x800")
+        self.root.configure(bg='#f0f0f0')
+
+        self.ga_results = None
+        self.population_history = []
+        self.fitness_history = []
+        self.best_fitness_history = []
+
+        # El AG de ejemplo ya no se instancia aquí directamente
+        # self.example_ga = GeneticAlgorithm() # ELIMINAR O COMENTAR
+        self.report_generator = ReportGenerator()
+        self.animation_generator = AnimationGenerator()
+        self.ui_function_provider = CustomFunctionProvider()
+        set_function_provider(self.ui_function_provider)
+        
+        self.ga_executor = None # Se establecerá con set_ga_executor
+
+        self.create_interface()
+
+    def create_interface(self):
+        """Crea la interfaz dividida en dos paneles"""
+        main_frame = tk.Frame(self.root, bg='#f0f0f0')
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        left_panel = tk.Frame(main_frame, bg='white', width=420, relief='raised', bd=2)
+        left_panel.pack(side="left", fill="y", padx=(0, 10))
+        left_panel.pack_propagate(False)
+        
+        right_panel = tk.Frame(main_frame, bg='white', relief='raised', bd=2)
+        right_panel.pack(side="right", fill="both", expand=True)
+        
+        # Pasamos el ui_function_provider al config_panel
+        self.config_panel = ConfigPanel(left_panel, self, self.ui_function_provider)
+        self.visualization_panel = VisualizationPanel(right_panel, self)
+        
+    def run_example_algorithm(self, params):
+        """Ejecuta el algoritmo genético configurado con los parámetros proporcionados"""
+        if not self.ga_executor:
+            messagebox.showerror("Error", "No se ha configurado un ejecutor de Algoritmo Genético.")
+            return
+
+        try:
+            # Llamar al ejecutor configurado
+            results = self.ga_executor(params, self.root) # Pasamos params y la ventana raíz
+
+            if results is None: # La ejecución falló y ya mostró un error
+                return
+
+            self.ga_results = results['ga_results']
+            self.population_history = results['population_history']
+            self.fitness_history = results['fitness_history']
+            self.best_fitness_history = results['best_fitness_history']
+
+            function_text_from_ga = self.ga_results.get('function_text_for_report')
+            if function_text_from_ga:
+                from ui.function_editor import FunctionEditor # Temporal para obtener el validador
+                temp_editor_dialog_parent = tk.Toplevel(self.root) # Crear un padre temporal para el diálogo
+                temp_editor_dialog_parent.withdraw() # Ocultarlo
+                
+                temp_editor = FunctionEditor(temp_editor_dialog_parent) 
+                temp_editor.current_function.set(function_text_from_ga)
+                is_valid = temp_editor.validate_function()
+                if is_valid:
+                    self.ui_function_provider.set_function(function_text_from_ga, temp_editor.compiled_function)
+                    self.config_panel.update_function_display()
+                else:
+                    messagebox.showerror("Error", "La función reportada por el AG no pudo ser validada por la UI.")
+                temp_editor.dialog.destroy()
+                temp_editor_dialog_parent.destroy() # Destruir el padre temporal también
+            else:
+                messagebox.showwarning("Advertencia", "El AG no reportó la función objetivo utilizada.")
+
+            self.config_panel.enable_buttons()
+            mode_text = "Minimización" if params['is_minimizing'] else "Maximización"
+            messagebox.showinfo("Completado",
+                                f"Algoritmo de ejemplo completado! ({mode_text})\n\n"
+                                f"Mejor solución: x = {self.ga_results['best_x']:.6f}\n"
+                                f"Mejor fitness (real): f(x) = {self.ga_results['best_fitness']:.6f}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error durante la ejecución del AG: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def generate_report(self, filename):
+        if not self.ga_results:
+            messagebox.showwarning("Advertencia", "No hay resultados para generar el reporte.")
+            return False
+        try:
+            # ReportGenerator usará get_function_provider() que ahora está
+            # sincronizado con la función que el AG usó.
+            self.report_generator.generate(
+                filename, 
+                self.ga_results, 
+                self.best_fitness_history
+            )
+            return True
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar el reporte: {str(e)}")
+            return False
+    
+    def save_animation(self, filename):
+        if not self.ga_results:
+            messagebox.showwarning("Advertencia", "Primero debe ejecutar el algoritmo.")
+            return False
+        try:
+            self.animation_generator.generate(
+                filename,
+                self.best_fitness_history,
+                self.ga_results['is_minimizing'],
+                self.root
+            )
+            return True
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar la animación: {str(e)}")
+            return False
+    
+    def clear_results(self):
+        self.ga_results = None
+        self.population_history = []
+        self.fitness_history = []
+        self.best_fitness_history = []
+        self.visualization_panel.clear_graph_area()
+        self.visualization_panel.create_welcome_message()
+        self.config_panel.disable_buttons()
+        messagebox.showinfo("Completado", "Todos los resultados han sido limpiados.")
+    
+    def run(self):
+        self.root.mainloop()
+    
+    def set_ga_executor(self, executor_func):
+        """Permite configurar la función que ejecuta el AG"""
+        self.ga_executor = executor_func
+
+===== ./ui/visualization_panel.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Panel de visualización de gráficas
+"""
+
+import tkinter as tk
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+from utils.math_functions import binary_to_decimal
+
+class VisualizationPanel:
+    """Clase que maneja el panel de visualización (derecho)"""
+    
+    def __init__(self, parent, main_window):
+        """Inicializa el panel de visualización"""
+        self.parent = parent
+        self.main_window = main_window
+        
+        # Referencias para gráficas
+        self.graph_container = None
+        self.current_canvas = None
+        self.current_figure = None
+        
+        # Variables para animación
+        self.is_animating = False
+        self.animation_generation = 0
+        self.ax = None
+        self.line = None
+        self.gen_text = None
+        self.fitness_text = None
+        
+        # Crear interfaz
+        self.create_visualization_panel()
+    
+    def create_visualization_panel(self):
+        """Crea el panel de visualización"""
+        # Frame para la gráfica con borde
+        self.graph_container = tk.Frame(self.parent, bg='white', relief='sunken', bd=2)
+        self.graph_container.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Mensaje inicial
+        self.create_welcome_message()
+    
+    def create_welcome_message(self):
+        """Crea el mensaje de bienvenida"""
+        welcome_frame = tk.Frame(self.graph_container, bg='white')
+        welcome_frame.pack(expand=True)
+        
+        welcome_text = """
+        Algoritmo Genético
+        Con función objetivo personalizable
+        
+        1. Configure o edite la función objetivo
+        2. Configure los parámetros
+        3. Seleccione modo (Maximizar o Minimizar)
+        4. Ejecute el algoritmo
+        5. Seleccione una gráfica para visualizar
+        """
+        
+        tk.Label(welcome_frame, text=welcome_text, 
+                font=("Arial", 16), bg='white',
+                justify="center").pack(expand=True)
+    
+    def clear_graph_area(self):
+        """Limpia el área de gráficas"""
+        # Detener cualquier animación en curso
+        self.is_animating = False
+            
+        if self.current_canvas:
+            self.current_canvas.get_tk_widget().destroy()
+            self.current_canvas = None
+        
+        if self.current_figure:
+            plt.close(self.current_figure)
+            self.current_figure = None
+    
+    def show_graph(self, graph_type, ga_results, population_history, fitness_history, best_fitness_history):
+        """Muestra la gráfica seleccionada"""
+        # Limpiar área de gráficas
+        self.clear_graph_area()
+        
+        # Crear la gráfica correspondiente
+        self.current_figure = Figure(figsize=(14, 9), dpi=100)
+        
+        if graph_type == "objective":
+            self.create_objective_graph(ga_results)
+        elif graph_type == "evolution_best":
+            self.create_evolution_best_graph(ga_results, best_fitness_history)
+        elif graph_type == "evolution_all":
+            self.create_evolution_all_graph(ga_results, population_history, fitness_history)
+        
+        # Mostrar la gráfica ocupando todo el espacio
+        self.current_canvas = FigureCanvasTkAgg(self.current_figure, 
+                                               master=self.graph_container)
+        self.current_canvas.draw()
+        self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=0, pady=0)
+    
+    def create_objective_graph(self, ga_results):
+        """Crea la gráfica de la función objetivo"""
+        ax = self.current_figure.add_subplot(111)
+        
+        x_min = ga_results['x_min']
+        x_max = ga_results['x_max']
+        x_vals = np.linspace(x_min, x_max, 1000)
+        
+        # Obtener la función personalizada para la etiqueta
+        from utils.math_functions import get_function_provider
+        function_provider = get_function_provider()
+        function_text = function_provider.function_text
+        
+        # Mejorar la presentación
+        display_text = function_text
+        display_text = display_text.replace('*', '·')
+        display_text = display_text.replace('pi', 'π')
+        
+        # Usar el raw_function_value (siempre es positivo)
+        y_vals = [get_function_provider().get_raw_function_value(x) for x in x_vals]
+        
+        # Determinar el texto del modo
+        mode_text = "Minimizando" if ga_results['is_minimizing'] else "Maximizando"
+        
+        ax.plot(x_vals, y_vals, 'b-', linewidth=3, 
+               label=f'f(x) = {display_text}')
+        ax.axvline(ga_results['best_x'], color='red', linestyle='--', 
+                  linewidth=3, label=f'Mejor: x = {ga_results["best_x"]:.3f}')
+        ax.scatter([ga_results['best_x']], [ga_results['objective_function_raw']], 
+                  color='red', s=200, zorder=5, 
+                  label=f'f(x) = {ga_results["objective_function_raw"]:.3f}')
+        
+        ax.set_xlabel('x', fontsize=16)
+        ax.set_ylabel('f(x)', fontsize=16)
+        ax.set_title(f'Función Objetivo y Mejor Solución ({mode_text})', fontsize=18, fontweight='bold')
+        ax.legend(fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        # Ajustar márgenes para aprovechar todo el espacio
+        self.current_figure.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.15)
+    
+    def create_evolution_best_graph(self, ga_results, best_fitness_history):
+        """Crea la gráfica de evolución del mejor individuo"""
+        ax = self.current_figure.add_subplot(111)
+        
+        generations = range(len(best_fitness_history))
+        y_vals = best_fitness_history.copy()
+        
+        ax.plot(generations, y_vals, 'g-', 
+               linewidth=3, marker='o', markersize=8)
+        
+        # Determinar mejoras según modo de optimización
+        if ga_results['is_minimizing']:
+            # Para minimización, mejora cuando el valor disminuye
+            for i in range(1, len(best_fitness_history)):
+                if best_fitness_history[i] < best_fitness_history[i-1]:
+                    ax.scatter(i, y_vals[i], 
+                              color='orange', s=120, zorder=5)
+            
+            # Determinar mejora total (minimización: mejora cuando disminuye)
+            improvement = best_fitness_history[0] - best_fitness_history[-1]
+            mode_text = "Minimizando"
+        else:
+            # Para maximización, mejora cuando el valor aumenta
+            for i in range(1, len(best_fitness_history)):
+                if best_fitness_history[i] > best_fitness_history[i-1]:
+                    ax.scatter(i, y_vals[i], 
+                              color='orange', s=120, zorder=5)
+            
+            # Determinar mejora total (maximización: mejora cuando aumenta)
+            improvement = best_fitness_history[-1] - best_fitness_history[0]
+            mode_text = "Maximizando"
+        
+        ax.set_xlabel('Generación', fontsize=16)
+        ax.set_ylabel('Mejor Fitness (Valor real de f(x))', fontsize=16)
+        ax.set_title(f'Evolución del Mejor Individuo ({mode_text})', fontsize=18, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        # Añadir estadísticas
+        ax.text(0.02, 0.98, f'Mejora total: {improvement:.4f}', 
+               transform=ax.transAxes, fontsize=14, 
+               verticalalignment='top', 
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        # Ajustar márgenes
+        self.current_figure.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.15)
+    
+    def create_evolution_all_graph(self, ga_results, population_history, fitness_history):
+        """Crea la gráfica de evolución de toda la población"""
+        ax = self.current_figure.add_subplot(111)
+        
+        # Preparar datos
+        all_x_values = []
+        generation_numbers = []
+        all_fitness_values = []
+        
+        for gen, (gen_pop, fitness_scores) in enumerate(zip(population_history, fitness_history)):
+            for individual, fitness in zip(gen_pop, fitness_scores):
+                x_val = binary_to_decimal(individual, 
+                                         ga_results['x_min'], 
+                                         ga_results['x_max'], 
+                                         ga_results['n_bits'])
+                all_x_values.append(x_val)
+                generation_numbers.append(gen)
+                all_fitness_values.append(fitness)
+        
+        # Crear scatter plot
+        scatter = ax.scatter(all_x_values, generation_numbers, 
+                           c=all_fitness_values, cmap='viridis', 
+                           alpha=0.7, s=60)
+        
+        # Colorbar
+        cbar = self.current_figure.colorbar(scatter, ax=ax)
+        cbar.set_label('Fitness (Valor real de f(x))', fontsize=14)
+        
+        # Línea del mejor de cada generación
+        best_x_history = []
+        for gen_pop, fitness_scores in zip(population_history, fitness_history):
+            if ga_results['is_minimizing']:
+                # Para minimización, el mejor es el mínimo
+                best_idx = fitness_scores.index(min(fitness_scores))
+            else:
+                # Para maximización, el mejor es el máximo
+                best_idx = fitness_scores.index(max(fitness_scores))
+                
+            best_x = binary_to_decimal(gen_pop[best_idx], 
+                                      ga_results['x_min'], 
+                                      ga_results['x_max'], 
+                                      ga_results['n_bits'])
+            best_x_history.append(best_x)
+        
+        ax.plot(best_x_history, range(len(best_x_history)), 
+               'r-', linewidth=3, alpha=0.8, label='Trayectoria del mejor')
+        
+        # Determinar el texto del modo
+        mode_text = "Minimizando" if ga_results['is_minimizing'] else "Maximizando"
+        
+        ax.set_xlabel('x', fontsize=16)
+        ax.set_ylabel('Generación', fontsize=16)
+        ax.set_title(f'Evolución de Toda la Población ({mode_text})', fontsize=18, fontweight='bold')
+        ax.legend(fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        # Ajustar márgenes
+        self.current_figure.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.15)
+    
+    def start_animation(self, best_fitness_history, is_minimizing):
+        """Inicia la animación paso a paso de la evolución"""
+        # Limpiar área de gráficas
+        self.clear_graph_area()
+        
+        # Crear la figura para la animación
+        self.current_figure = Figure(figsize=(14, 9), dpi=100)
+        self.ax = self.current_figure.add_subplot(111)
+        
+        # Determinar el texto del modo
+        mode_text = "Minimizando" if is_minimizing else "Maximizando"
+        
+        # Configuración inicial de la gráfica
+        self.ax.set_xlabel('Generación', fontsize=16)
+        self.ax.set_ylabel('Mejor Fitness (Valor real de f(x))', fontsize=16)
+        self.ax.set_title(f'Evolución del Mejor Individuo - Animación ({mode_text})', 
+                         fontsize=18, fontweight='bold')
+        self.ax.grid(True, alpha=0.3)
+        self.ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        y_vals = best_fitness_history.copy()
+        
+        # Configurar límites para mantener la gráfica estable
+        min_fitness = min(y_vals)
+        max_fitness = max(y_vals)
+        padding = (max_fitness - min_fitness) * 0.1 if max_fitness > min_fitness else 1
+        self.ax.set_ylim(min_fitness - padding, max_fitness + padding)
+        self.ax.set_xlim(-1, len(best_fitness_history))
+        
+        # Crear línea para la animación (inicialmente vacía)
+        self.line, = self.ax.plot([], [], 'g-', linewidth=3, marker='o', markersize=8)
+        
+        # Añadir etiqueta de generación actual
+        self.gen_text = self.ax.text(0.02, 0.98, 'Generación: 0', 
+                                    transform=self.ax.transAxes, fontsize=14,
+                                    verticalalignment='top',
+                                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        # Añadir etiqueta de fitness actual
+        self.fitness_text = self.ax.text(0.02, 0.90, f'Fitness: {best_fitness_history[0]:.4f}', 
+                                        transform=self.ax.transAxes, fontsize=14,
+                                        verticalalignment='top',
+                                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        # Ajustar márgenes
+        self.current_figure.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.15)
+        
+        # Mostrar la gráfica
+        self.current_canvas = FigureCanvasTkAgg(self.current_figure, 
+                                               master=self.graph_container)
+        self.current_canvas.draw()
+        self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Iniciar animación
+        self.animation_generation = 0
+        self.is_animating = True
+        self.animate_step(best_fitness_history, is_minimizing)
+    
+    def animate_step(self, best_fitness_history, is_minimizing):
+        """Ejecuta un paso de la animación"""
+        if not self.is_animating or self.animation_generation >= len(best_fitness_history):
+            self.is_animating = False
+            return
+        
+        # Actualizar datos
+        x_data = list(range(self.animation_generation + 1))
+        y_data = best_fitness_history[:self.animation_generation + 1]
+        
+        # Actualizar línea
+        self.line.set_data(x_data, y_data)
+        
+        # Actualizar textos informativos
+        self.gen_text.set_text(f'Generación: {self.animation_generation + 1}')
+        self.fitness_text.set_text(f'Fitness: {best_fitness_history[self.animation_generation]:.4f}')
+        
+        # Resaltar mejoras según modo de optimización
+        if self.animation_generation > 0:
+            if is_minimizing:
+                # Para minimización, mejora cuando el valor disminuye
+                if best_fitness_history[self.animation_generation] < best_fitness_history[self.animation_generation-1]:
+                    self.ax.scatter([self.animation_generation], 
+                                   [y_data[self.animation_generation]], 
+                                   color='orange', s=120, zorder=5)
+            else:
+                # Para maximización, mejora cuando el valor aumenta
+                if best_fitness_history[self.animation_generation] > best_fitness_history[self.animation_generation-1]:
+                    self.ax.scatter([self.animation_generation], 
+                                   [y_data[self.animation_generation]], 
+                                   color='orange', s=120, zorder=5)
+        
+        # Actualizar canvas
+        self.current_canvas.draw()
+        
+        # Incrementar contador
+        self.animation_generation += 1
+        
+        # Programar siguiente paso (velocidad ajustable)
+        delay_ms = 200  # Velocidad de la animación
+        if self.is_animating:
+            self.parent.after(delay_ms, lambda: self.animate_step(best_fitness_history, is_minimizing))
+    
+    def stop_animation(self):
+        """Detiene la animación en curso"""
+        self.is_animating = False
+
+===== ./utils/__init__.py =====
+
+
+
+===== ./utils/export.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Funciones para exportar resultados (reportes y animaciones)
+"""
+
+import os
+import datetime
+import subprocess
+import numpy as np
+import tkinter as tk
+from tkinter import ttk, messagebox
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+from utils.math_functions import binary_to_decimal, get_raw_function_value, get_function_provider
+
+class ReportGenerator:
+    """Clase para generar reportes de resultados"""
+    
+    def __init__(self):
+        pass
+    
+    def generate(self, filename, ga_results, best_fitness_history):
+        if ga_results['is_minimizing']:
+            mode_text = "MINIMIZACIÓN"
+        else:
+            mode_text = "MAXIMIZACIÓN"
+        
+        # Usar la función textual que el AG usó (debe estar en los resultados)
+        function_text_from_ga = ga_results.get('function_text_for_report', "Función no especificada por el AG")
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write("="*60 + "\n")
+            f.write(f"REPORTE ALGORITMO GENÉTICO - {mode_text}\n")
+            f.write(f"f(x) = {function_text_from_ga}\n")
+            f.write("="*60 + "\n")
+            f.write(f"Fecha y hora: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
+            f.write("PARÁMETROS DE CONFIGURACIÓN (DEL AG EJECUTADO):\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"• Intervalo: [{ga_results['x_min']}, {ga_results['x_max']}]\n")
+            delta_x_approx = (ga_results['x_max'] - ga_results['x_min']) / (2**ga_results['n_bits'] - 1) if (2**ga_results['n_bits'] - 1) != 0 else float('inf')
+            f.write(f"• Δx (aprox): {delta_x_approx:.6f}\n")
+            f.write(f"• Tamaño de población: {ga_results['pop_size']}\n")
+            f.write(f"• Número de generaciones: {ga_results['generations']}\n")
+            f.write(f"• Número de bits: {ga_results['n_bits']}\n")
+            f.write(f"• Probabilidad de cruzamiento: {ga_results['prob_crossover']}\n")
+            f.write(f"• PMI (Probabilidad de mutación individuo): {ga_results['prob_mutation_i']}\n")
+            f.write(f"• PMG (Probabilidad de mutación gen): {ga_results['prob_mutation_g']}\n")
+            f.write(f"• Modo de optimización: {mode_text}\n\n")
+            
+            f.write("RESULTADOS PRINCIPALES:\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"• Mejor solución encontrada: x = {ga_results['best_x']:.6f}\n")
+            f.write(f"• Mejor fitness (real): f(x) = {ga_results['best_fitness']:.6f}\n")
+            f.write(f"• Individuo binario: {''.join(map(str, ga_results['best_individual']))}\n")
+            f.write(f"• Mejora total (sobre fitness real): {ga_results['improvement']:.6f}\n")
+            f.write(f"• Mejora promedio por generación: {ga_results['improvement']/ga_results['generations'] if ga_results['generations'] > 0 else 0:.6f}\n\n")
+            
+            f.write("ANÁLISIS DE CONVERGENCIA (SOBRE FITNESS REAL):\n")
+            f.write("-" * 30 + "\n")
+            if best_fitness_history:
+                f.write(f"• Fitness inicial (real): {best_fitness_history[0]:.6f}\n")
+                f.write(f"• Fitness final (real): {best_fitness_history[-1]:.6f}\n")
+            else:
+                f.write("• Fitness inicial (real): N/A\n")
+                f.write("• Fitness final (real): N/A\n")
+            
+            significant_improvements = 0
+            if ga_results['is_minimizing']:
+                for i in range(1, len(best_fitness_history)):
+                    if best_fitness_history[i] < best_fitness_history[i-1]:
+                        significant_improvements += 1
+            else:
+                for i in range(1, len(best_fitness_history)):
+                    if best_fitness_history[i] > best_fitness_history[i-1]:
+                        significant_improvements += 1
+            percent_productive = (significant_improvements/len(best_fitness_history))*100 if len(best_fitness_history) > 0 else 0
+            f.write(f"• Generaciones con mejora: {significant_improvements}\n")
+            f.write(f"• Porcentaje de generaciones productivas: {percent_productive:.1f}%\n\n")
+            
+            f.write("POBLACIÓN FINAL (FITNESS REALES):\n")
+            f.write("-" * 30 + "\n")
+            final_x_values = []
+            for i, (individual, raw_fitness) in enumerate(zip(ga_results['final_population'], ga_results['final_fitness'])):
+                x_val = binary_to_decimal(individual, 
+                                         ga_results['x_min'], 
+                                         ga_results['x_max'], 
+                                         ga_results['n_bits'])
+                final_x_values.append(x_val)
+                binary_str = ''.join(map(str, individual))
+                f.write(f"• Individuo {i+1}: {binary_str} -> x = {x_val:.6f}, f(x) = {raw_fitness:.6f}\n")
+            
+            if final_x_values:
+                f.write(f"\n• Diversidad final (desviación estándar de x): {np.std(final_x_values):.6f}\n")
+                f.write(f"• Rango de soluciones x: [{min(final_x_values):.6f}, {max(final_x_values):.6f}]\n\n")
+            else:
+                f.write("\n• Diversidad final (desviación estándar de x): N/A\n")
+                f.write("• Rango de soluciones x: N/A\n\n")
+            
+            f.write("HISTORIAL DE MEJORES FITNESS (REALES):\n")
+            f.write("-" * 30 + "\n")
+            limit_display = 5
+            if len(best_fitness_history) > 2 * limit_display:
+                f.write(f"Primeras {limit_display} generaciones:\n")
+                for i in range(limit_display):
+                    f.write(f"  Gen {i+1}: {best_fitness_history[i]:.6f}\n")
+                f.write("  ...\n")
+                f.write(f"Últimas {limit_display} generaciones:\n")
+                for i in range(len(best_fitness_history) - limit_display, len(best_fitness_history)):
+                    f.write(f"  Gen {i+1}: {best_fitness_history[i]:.6f}\n")
+            else:
+                for i in range(len(best_fitness_history)):
+                    f.write(f"  Gen {i+1}: {best_fitness_history[i]:.6f}\n")
+
+            f.write("\nESTADÍSTICAS ADICIONALES:\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"• Evaluaciones totales de la función: {ga_results['pop_size'] * ga_results['generations']}\n")
+            f.write(f"• Tipo de selección (ejemplo AG): Emparejamiento aleatorio con poda\n")
+            f.write(f"• Tipo de cruzamiento (ejemplo AG): 3 puntos aleatorios\n")
+            f.write(f"• Tipo de mutación (ejemplo AG): Intercambio de genes\n\n")
+            
+            f.write("="*60 + "\nFIN DEL REPORTE\n" + "="*60 + "\n")
+        return True
+
+    def open_file(self, filename):
+        if not os.path.exists(filename):
+            return False
+        if messagebox.askyesno("Abrir archivo", "¿Desea abrir el reporte?"):
+            try:
+                if os.name == 'nt':
+                    os.startfile(filename)
+                elif os.name == 'posix':
+                    import platform
+                    if platform.system() == 'Darwin':
+                        subprocess.call(('open', filename))
+                    else:
+                        subprocess.call(('xdg-open', filename))
+            except Exception as e:
+                messagebox.showwarning("Advertencia", f"No se pudo abrir el archivo automáticamente: {str(e)}")
+                return False
+        return True
+
+class AnimationGenerator:
+    def __init__(self):
+        pass
+    
+    def generate(self, filename, best_fitness_history, is_minimizing, root):
+        progress_window = tk.Toplevel(root)
+        progress_window.title("Generando Animación...")
+        progress_window.geometry("400x120")
+        progress_window.configure(bg='#f0f0f0')
+        tk.Label(progress_window, text="Generando animación...", font=("Arial", 12), bg='#f0f0f0').pack(pady=20)
+        progress_bar = ttk.Progressbar(progress_window, mode='indeterminate')
+        progress_bar.pack(pady=10, padx=20, fill='x')
+        progress_bar.start(10)
+        progress_window.update()
+
+        try:
+            fig = plt.figure(figsize=(10, 6), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            ax.set_xlabel('Generación', fontsize=12)
+            ax.set_ylabel('Mejor Fitness (Valor real)', fontsize=12)
+            ax.set_title('Evolución del Mejor Individuo', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            
+            y_vals = best_fitness_history
+            min_fitness = min(y_vals) if y_vals else 0
+            max_fitness = max(y_vals) if y_vals else 1
+            padding = (max_fitness - min_fitness) * 0.1 if (max_fitness - min_fitness) > 0 else 1
+            ax.set_ylim(min_fitness - padding, max_fitness + padding)
+            ax.set_xlim(-1, len(best_fitness_history) if best_fitness_history else 1)
+            
+            line, = ax.plot([], [], 'g-', linewidth=2, marker='o', markersize=6)
+            gen_text = ax.text(0.02, 0.95, 'Generación: 0', transform=ax.transAxes, fontsize=10,
+                             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+            initial_fitness_text = f'Fitness: {best_fitness_history[0]:.4f}' if best_fitness_history else 'Fitness: N/A'
+            fitness_text = ax.text(0.02, 0.87, initial_fitness_text, transform=ax.transAxes, fontsize=10,
+                                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+            
+            improvements_indices = []
+            if best_fitness_history:
+                for i in range(1, len(best_fitness_history)):
+                    condition = best_fitness_history[i] < best_fitness_history[i-1] if is_minimizing else best_fitness_history[i] > best_fitness_history[i-1]
+                    if condition:
+                        improvements_indices.append(i)
+            
+            def init():
+                line.set_data([], [])
+                gen_text.set_text('Generación: 0')
+                fitness_text.set_text(initial_fitness_text)
+                return line, gen_text, fitness_text
+            
+            def animate_frame(i):
+                if not best_fitness_history:
+                    return line, gen_text, fitness_text
+                x_data = list(range(i + 1))
+                y_data = best_fitness_history[:i + 1]
+                line.set_data(x_data, y_data)
+                gen_text.set_text(f'Generación: {i + 1}')
+                fitness_text.set_text(f'Fitness: {best_fitness_history[i]:.4f}')
+                if i in improvements_indices:
+                    ax.scatter([i], [best_fitness_history[i]], color='orange', s=100, zorder=5)
+                return line, gen_text, fitness_text
+            
+            num_frames = len(best_fitness_history) if best_fitness_history else 0
+            anim = animation.FuncAnimation(fig, animate_frame, init_func=init, frames=num_frames, interval=200, blit=True)
+            
+            if num_frames == 0:
+                messagebox.showwarning("Animación", "No hay datos para generar la animación.")
+            elif filename.endswith('.mp4'):
+                writer = animation.FFMpegWriter(fps=5)
+                anim.save(filename, writer=writer)
+            elif filename.endswith('.gif'):
+                writer = animation.PillowWriter(fps=5)
+                anim.save(filename, writer=writer)
+            else:
+                writer = animation.FFMpegWriter(fps=5)
+                anim.save(f"{filename}.mp4", writer=writer)
+            
+            plt.close(fig)
+            progress_window.destroy()
+
+            if num_frames > 0:
+                messagebox.showinfo("Completado", f"Animación guardada exitosamente en:\n{filename}")
+                if messagebox.askyesno("Abrir archivo", "¿Desea abrir la animación?"):
+                    try:
+                        if os.name == 'nt':
+                            os.startfile(filename)
+                        elif os.name == 'posix':
+                            import platform
+                            if platform.system() == 'Darwin':
+                                subprocess.call(('open', filename))
+                            else:
+                                subprocess.call(('xdg-open', filename))
+                    except Exception as e:
+                        messagebox.showwarning("Advertencia", f"No se pudo abrir el archivo automáticamente: {str(e)}")
+            return True
+            
+        except Exception as e:
+            progress_window.destroy()
+            if "MovieWriter" in str(e) or "ffmpeg" in str(e).lower():
+                messagebox.showinfo("Información", 
+                                  "Para guardar animaciones en formato MP4, necesita tener FFmpeg instalado.\n"
+                                  "Visite: https://www.ffmpeg.org/download.html\n\n"
+                                  "Alternativamente, intente guardar como GIF (.gif)")
+            messagebox.showerror("Error de Animación", f"No se pudo generar la animación: {str(e)}")
+            return False
+
+===== ./utils/helpers.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Funciones auxiliares para la aplicación
+"""
+
+import os
+import platform
+import subprocess
+import tkinter as tk
+from tkinter import messagebox
+
+def show_progress_window(parent, title="Procesando...", message="Por favor espere...", progress_mode='indeterminate'):
+    """Crea una ventana de progreso para operaciones largas
+    
+    Args:
+        parent: Ventana padre
+        title: Título de la ventana
+        message: Mensaje a mostrar
+        progress_mode: Modo de la barra de progreso ('determinate' o 'indeterminate')
+        
+    Returns:
+        Tupla (ventana, barra_progreso, etiqueta) para manipular la ventana creada
+    """
+    progress_window = tk.Toplevel(parent)
+    progress_window.title(title)
+    progress_window.geometry("400x120")
+    progress_window.configure(bg='#f0f0f0')
+    progress_window.resizable(False, False)
+    
+    # Hacer que la ventana sea modal
+    progress_window.transient(parent)
+    progress_window.grab_set()
+    
+    # Componentes de la ventana
+    tk.Label(progress_window, text=message, 
+            font=("Arial", 12), bg='#f0f0f0').pack(pady=20)
+    
+    from tkinter import ttk
+    progress_bar = ttk.Progressbar(progress_window, mode=progress_mode)
+    progress_bar.pack(pady=10, padx=20, fill='x')
+    
+    if progress_mode == 'indeterminate':
+        progress_bar.start(10)
+    
+    progress_label = tk.Label(progress_window, text="", 
+                             font=("Arial", 10), bg='#f0f0f0')
+    progress_label.pack()
+    
+    progress_window.update()
+    
+    return progress_window, progress_bar, progress_label
+
+def open_file(filepath):
+    """Abre un archivo con la aplicación predeterminada del sistema
+    
+    Args:
+        filepath: Ruta al archivo a abrir
+    
+    Returns:
+        bool: True si se pudo abrir el archivo, False en caso contrario
+    """
+    if not os.path.exists(filepath):
+        return False
+        
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(filepath)
+        elif platform.system() == 'Darwin':  # macOS
+            subprocess.run(['open', filepath])
+        else:  # Linux y otros
+            subprocess.run(['xdg-open', filepath])
+        return True
+    except Exception as e:
+        messagebox.showwarning("Advertencia", 
+                             f"No se pudo abrir el archivo automáticamente: {str(e)}")
+        return False
+
+def validate_numeric_input(value, min_value=None, max_value=None, allow_negative=True, allow_float=True):
+    """Valida que un valor sea numérico y esté dentro de los límites especificados
+    
+    Args:
+        value: Valor a validar
+        min_value: Valor mínimo permitido (opcional)
+        max_value: Valor máximo permitido (opcional)
+        allow_negative: Si se permiten valores negativos
+        allow_float: Si se permiten valores decimales
+    
+    Returns:
+        tuple: (es_válido, valor_convertido)
+    """
+    try:
+        # Convertir a número
+        if allow_float:
+            numeric_value = float(value)
+        else:
+            numeric_value = int(value)
+            
+        # Verificar si es negativo cuando no se permite
+        if not allow_negative and numeric_value < 0:
+            return False, None
+            
+        # Verificar límites
+        if min_value is not None and numeric_value < min_value:
+            return False, None
+            
+        if max_value is not None and numeric_value > max_value:
+            return False, None
+            
+        return True, numeric_value
+    except (ValueError, TypeError):
+        return False, None
+
+===== ./utils/keyboard_utils.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Utilidades para el teclado virtual y la edición de funciones
+"""
+
+import re
+import numpy as np
+from sympy import symbols, sympify, lambdify, SympifyError
+
+def format_function_text(function_text):
+    """
+    Formatea el texto de una función para mejor visualización
+    
+    Args:
+        function_text: Texto de la función
+    
+    Returns:
+        str: Texto formateado
+    """
+    display_text = function_text.replace('*', '·')
+    display_text = display_text.replace('pi', 'π')
+    display_text = display_text.replace('/', '÷')
+    display_text = display_text.replace('sqrt', '√')
+    return display_text
+
+def prepare_function_for_eval(function_text):
+    """
+    Prepara el texto de una función para evaluación
+    
+    Args:
+        function_text: Texto de la función
+    
+    Returns:
+        str: Texto preparado para evaluación
+    """
+    eval_text = function_text.replace('π', 'pi')
+    eval_text = eval_text.replace('^', '**')
+    eval_text = eval_text.replace('ln(', 'log(')
+    return eval_text
+
+def validate_function_syntax(function_text):
+    """
+    Valida la sintaxis de una función
+    
+    Args:
+        function_text: Texto de la función
+    
+    Returns:
+        tuple: (bool, str, función_compilada) donde:
+            - bool: True si la función es válida, False en caso contrario
+            - str: Mensaje de error o éxito
+            - función_compilada: Función compilada o None
+    """
+    # Si está vacía
+    if not function_text.strip():
+        return False, "Función vacía", None
+    
+    try:
+        # Preparar el texto para evaluación
+        eval_text = prepare_function_for_eval(function_text)
+        
+        # Usar sympy para validar la expresión
+        x = symbols('x')
+        expr = sympify(eval_text)
+        
+        # Convertir a una función lambda de numpy para evaluación rápida
+        compiled_function = lambdify(x, expr, ['numpy', {'ln': np.log, 'log': np.log10}])
+        
+        # Probar la función con varios valores
+        test_values = [-10, -1, 0, 1, 10]
+        for val in test_values:
+            try:
+                result = compiled_function(val)
+                # Verificar si el resultado es válido
+                if not np.isfinite(result) or np.isnan(result):
+                    return False, f"La función produce valores no válidos para x={val}", None
+            except Exception as e:
+                return False, f"Error al evaluar x={val}: {str(e)}", None
+        
+        return True, "Función válida", compiled_function
+                
+    except SympifyError as e:
+        return False, f"Error de sintaxis: {str(e)}", None
+    except Exception as e:
+        return False, f"Error: {str(e)}", None
+
+def get_function_complexity(function_text):
+    """
+    Calcula la complejidad de una función basada en operadores y funciones
+    
+    Args:
+        function_text: Texto de la función
+    
+    Returns:
+        int: Valor de complejidad (mayor es más complejo)
+    """
+    complexity = 0
+    
+    # Contar operadores
+    operators = ['+', '-', '*', '/', '^']
+    for op in operators:
+        complexity += function_text.count(op)
+    
+    # Contar funciones (más peso)
+    functions = ['sin', 'cos', 'tan', 'exp', 'log', 'ln', 'sqrt', 'abs']
+    for func in functions:
+        complexity += function_text.count(func) * 2
+    
+    # Contar paréntesis anidados (mayor complejidad)
+    max_depth = 0
+    current_depth = 0
+    for char in function_text:
+        if char == '(':
+            current_depth += 1
+            max_depth = max(max_depth, current_depth)
+        elif char == ')':
+            current_depth = max(0, current_depth - 1)
+    
+    complexity += max_depth * 3
+    
+    return complexity
+
+def evaluate_function(compiled_function, x_value, is_minimizing=True):
+    """
+    Evalúa una función compilada en un valor dado
+    
+    Args:
+        compiled_function: Función compilada
+        x_value: Valor en el que evaluar
+        is_minimizing: Si estamos minimizando o maximizando
+    
+    Returns:
+        float: Resultado de la evaluación (adaptado para min/max)
+    """
+    try:
+        result = compiled_function(x_value)
+        
+        # Si estamos minimizando, negamos el resultado
+        if is_minimizing:
+            return -result  # Negativo para minimización
+        else:
+            return result   # Positivo para maximización
+    except Exception:
+        return float('inf') if is_minimizing else float('-inf')
+
+===== ./utils/math_functions.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Funciones matemáticas para el algoritmo genético
+"""
+
+import numpy as np
+from typing import List
+
+# Variable global para almacenar la instancia del proveedor de funciones
+_function_provider = None
+
+def set_function_provider(provider):
+    """Establece el proveedor de funciones a usar globalmente"""
+    global _function_provider
+    _function_provider = provider
+
+def get_function_provider():
+    """Obtiene el proveedor de funciones actual"""
+    global _function_provider
+    # Si no existe, usar la función predeterminada
+    if _function_provider is None:
+        from ui.function_editor import CustomFunctionProvider  # Importación local
+        _function_provider = CustomFunctionProvider()
+        # CustomFunctionProvider ahora intenta compilar su función predeterminada en __init__
+    return _function_provider
+
+def objective_function(x: float, is_minimizing: bool) -> float:
+    """Función objetivo adaptada según modo de optimización (para uso del AG)"""
+    provider = get_function_provider()
+    return provider.evaluate(x, is_minimizing)
+
+def get_raw_function_value(x: float) -> float:
+    """Obtiene el valor real de la función (para reportes y visualización)"""
+    provider = get_function_provider()
+    return provider.get_raw_function_value(x)
+
+def binary_to_decimal(binary: List[int], x_min: float, x_max: float, n_bits: int) -> float:
+    """Convierte un individuo binario a valor decimal"""
+    decimal = 0
+    for bit in binary:
+        decimal = decimal * 2 + bit
+    
+    max_decimal = 2**n_bits - 1
+    if max_decimal == 0:  # Evitar división por cero si n_bits es 0 o hay un error
+        return x_min
+    x = x_min + (decimal / max_decimal) * (x_max - x_min)
+    return x
+
+def decimal_to_binary(decimal: int, n_bits: int) -> List[int]:
+    """Convierte un valor decimal a una representación binaria"""
+    binary = []
+    if n_bits <= 0:
+        return []
+    for _ in range(n_bits):
+        binary.insert(0, decimal % 2)
+        decimal //= 2
+    return binary
+
+===== ./visualization/__init__.py =====
+
+
+
+===== ./visualization/animation.py =====
+
+
+
+===== ./visualization/graph_generator.py =====
+
+
+
+===== ./example_ga/__init__.py =====
+
+
+
+===== ./example_ga/genetic_algorithm.py =====
+
+# ===== ./algorithm/genetic_algorithm.py =====
+
+"""
+Implementación de un Algoritmo Genético Estándar (Ejemplo 2)
+"""
+
+import random
+import numpy as np
+import tkinter as tk
+from tkinter import ttk
+from typing import List, Tuple, Dict, Any
+
+from utils.math_functions import objective_function, get_raw_function_value, binary_to_decimal, get_function_provider
+
+class GeneticAlgorithm:  # Mismo nombre de clase, pero en diferente módulo
+    """Clase que implementa un algoritmo genético estándar"""
+
+    def __init__(self):
+        pass
+
+    def run(self,
+            x_min: float,
+            x_max: float,
+            delta_x: float,
+            pop_size: int,
+            max_generations: int,
+            prob_crossover: float,
+            prob_mutation_i: float,
+            prob_mutation_g: float,
+            is_minimizing: bool,
+            progress_root_window: tk.Tk = None
+            ) -> Dict[str, Any]:
+
+        current_function_provider = get_function_provider()
+        function_text_used_by_ga = current_function_provider.function_text
+
+        print(f"--- Ejecutando Algoritmo Genético 'Standard' (desde algorithm/genetic_algorithm.py) ---")
+        print(f"--- Función objetivo: {function_text_used_by_ga} ---")
+
+        if x_min == 0 and x_max == 31 and delta_x == 1.0:
+            n_bits = 5
+        elif x_min >= 0 and x_max == int(x_max) and delta_x == 1.0:
+            range_size = int(x_max - x_min) + 1
+            n_bits = int(np.ceil(np.log2(range_size)))
+        else:
+            num_divisions = int((x_max - x_min) / delta_x)
+            n_bits = int(np.ceil(np.log2(num_divisions + 1)))
+
+        # Para este ejemplo, simplemente retornamos una estructura dummy
+        dummy_best_individual = [random.randint(0, 1) for _ in range(n_bits)]
+        dummy_population = [[random.randint(0, 1) for _ in range(n_bits)] for _ in range(pop_size)]
+        
+        best_x_val = binary_to_decimal(dummy_best_individual, x_min, x_max, n_bits)
+        best_fitness_val = get_raw_function_value(best_x_val)
+
+        final_fitness_vals = [get_raw_function_value(binary_to_decimal(ind, x_min, x_max, n_bits)) for ind in dummy_population]
+        
+        # Simular historial (muy simplificado)
+        population_history_dummy = [dummy_population for _ in range(max_generations)]
+        fitness_history_dummy = [final_fitness_vals for _ in range(max_generations)]
+        best_fitness_history_dummy = [best_fitness_val for _ in range(max_generations)]
+
+        if progress_root_window:
+            progress_window = tk.Toplevel(progress_root_window)
+            progress_window.title("Ejecutando AG (Standard)...")
+            progress_window.geometry("400x120")
+            tk.Label(progress_window, text=f"Simulando ejecución de AG Standard...").pack(pady=20)
+            temp_progress_bar = ttk.Progressbar(progress_window, mode='determinate', maximum=max_generations, value=max_generations)
+            temp_progress_bar.pack(pady=10, padx=20, fill='x')
+            progress_window.update()
+            progress_window.after(1000, progress_window.destroy)  # Cierra después de 1 seg
+
+        results = {
+            'ga_results': {
+                'best_individual': dummy_best_individual,
+                'best_x': best_x_val,
+                'best_fitness': best_fitness_val,
+                'x_min': x_min, 'x_max': x_max, 'n_bits': n_bits,
+                'pop_size': pop_size, 'generations': max_generations,
+                'prob_crossover': prob_crossover,
+                'prob_mutation_i': prob_mutation_i, 'prob_mutation_g': prob_mutation_g,
+                'improvement': 0.1,  # Dummy
+                'final_population': dummy_population,
+                'final_fitness': final_fitness_vals,
+                'is_minimizing': is_minimizing,
+                'function_text_for_report': function_text_used_by_ga
+            },
+            'population_history': population_history_dummy,
+            'fitness_history': fitness_history_dummy,
+            'best_fitness_history': best_fitness_history_dummy
+        }
+        print(f"--- AG 'Standard' finalizado. Mejor X: {best_x_val}, Fitness: {best_fitness_val} ---")
+        return results
+
+===== ./proyecto_completo.txt =====
+
+
+
+===== ./algorithm/__init__.py =====
+
+
+
+===== ./algorithm/genetic_algorithm.py =====
+
+# ===== ./algorithm/genetic_algorithm.py =====
+
+"""
+Implementación de un Algoritmo Genético Estándar (Ejemplo 2)
+"""
+
+import random
+import numpy as np
+import tkinter as tk
+from tkinter import ttk
+from typing import List, Tuple, Dict, Any
+
+from utils.math_functions import objective_function, get_raw_function_value, binary_to_decimal, get_function_provider
+
+class GeneticAlgorithm:  # Mismo nombre de clase, pero en diferente módulo
+    """Clase que implementa un algoritmo genético estándar"""
+
+    def __init__(self):
+        pass
+
+    def run(self,
+            x_min: float,
+            x_max: float,
+            delta_x: float,
+            pop_size: int,
+            max_generations: int,
+            prob_crossover: float,
+            prob_mutation_i: float,
+            prob_mutation_g: float,
+            is_minimizing: bool,
+            progress_root_window: tk.Tk = None
+            ) -> Dict[str, Any]:
+
+        current_function_provider = get_function_provider()
+        function_text_used_by_ga = current_function_provider.function_text
+
+        print(f"--- Ejecutando Algoritmo Genético 'Standard' (desde algorithm/genetic_algorithm.py) ---")
+        print(f"--- Función objetivo: {function_text_used_by_ga} ---")
+
+        if x_min == 0 and x_max == 31 and delta_x == 1.0:
+            n_bits = 5
+        elif x_min >= 0 and x_max == int(x_max) and delta_x == 1.0:
+            range_size = int(x_max - x_min) + 1
+            n_bits = int(np.ceil(np.log2(range_size)))
+        else:
+            num_divisions = int((x_max - x_min) / delta_x)
+            n_bits = int(np.ceil(np.log2(num_divisions + 1)))
+
+        # Para este ejemplo, simplemente retornamos una estructura dummy
+        dummy_best_individual = [random.randint(0, 1) for _ in range(n_bits)]
+        dummy_population = [[random.randint(0, 1) for _ in range(n_bits)] for _ in range(pop_size)]
+        
+        best_x_val = binary_to_decimal(dummy_best_individual, x_min, x_max, n_bits)
+        best_fitness_val = get_raw_function_value(best_x_val)
+
+        final_fitness_vals = [get_raw_function_value(binary_to_decimal(ind, x_min, x_max, n_bits)) for ind in dummy_population]
+        
+        # Simular historial (muy simplificado)
+        population_history_dummy = [dummy_population for _ in range(max_generations)]
+        fitness_history_dummy = [final_fitness_vals for _ in range(max_generations)]
+        best_fitness_history_dummy = [best_fitness_val for _ in range(max_generations)]
+
+        if progress_root_window:
+            progress_window = tk.Toplevel(progress_root_window)
+            progress_window.title("Ejecutando AG (Standard)...")
+            progress_window.geometry("400x120")
+            tk.Label(progress_window, text=f"Simulando ejecución de AG Standard...").pack(pady=20)
+            temp_progress_bar = ttk.Progressbar(progress_window, mode='determinate', maximum=max_generations, value=max_generations)
+            temp_progress_bar.pack(pady=10, padx=20, fill='x')
+            progress_window.update()
+            progress_window.after(1000, progress_window.destroy)  # Cierra después de 1 seg
+
+        results = {
+            'ga_results': {
+                'best_individual': dummy_best_individual,
+                'best_x': best_x_val,
+                'best_fitness': best_fitness_val,
+                'x_min': x_min, 'x_max': x_max, 'n_bits': n_bits,
+                'pop_size': pop_size, 'generations': max_generations,
+                'prob_crossover': prob_crossover,
+                'prob_mutation_i': prob_mutation_i, 'prob_mutation_g': prob_mutation_g,
+                'improvement': 0.1,  # Dummy
+                'final_population': dummy_population,
+                'final_fitness': final_fitness_vals,
+                'is_minimizing': is_minimizing,
+                'function_text_for_report': function_text_used_by_ga
+            },
+            'population_history': population_history_dummy,
+            'fitness_history': fitness_history_dummy,
+            'best_fitness_history': best_fitness_history_dummy
+        }
+        print(f"--- AG 'Standard' finalizado. Mejor X: {best_x_val}, Fitness: {best_fitness_val} ---")
+        return results
+
+===== ./manager/ga_manager.py =====
+
+# ===== ./manager/ga_manager.py =====
+
+"""
+Gestor de Algoritmos Genéticos (GA Manager)
+-------------------------------------------
+Este módulo centraliza la selección y carga de diferentes implementaciones
+de algoritmos genéticos para el visualizador.
+
+Para integrar un nuevo algoritmo genético:
+1.  Cree una nueva carpeta para su algoritmo (ej. `my_new_ga/`).
+2.  Dentro de esa carpeta, cree un archivo Python (ej. `my_ga_implementation.py`).
+3.  Implemente su clase de algoritmo genético en ese archivo.
+    Consulte `manager/README_FOR_NEW_ALGORITHMS.md` para la interfaz requerida.
+4.  Importe su clase de AG en este archivo (`ga_manager.py`).
+5.  Registre su AG en el diccionario `AVAILABLE_ALGORITHMS` abajo,
+    asociando un nombre único (string) con su clase.
+"""
+
+# Importaciones de las clases de los Algoritmos Genéticos disponibles
+# Asegúrate de que estas rutas sean correctas según tu estructura de proyecto
+from example_ga.genetic_algorithm import GeneticAlgorithm as ExampleGeneticAlgorithm
+from algorithm.genetic_algorithm import GeneticAlgorithm as StandardGeneticAlgorithm # Asumiendo que creas este
+
+# Diccionario para registrar los algoritmos disponibles
+# La clave es un nombre legible/identificador, el valor es la clase del AG.
+AVAILABLE_ALGORITHMS = {
+    "example_ga": ExampleGeneticAlgorithm,
+    "standard_ga": StandardGeneticAlgorithm,
+    # "nombre_unico_otro_ag": OtroAGClase, # Descomentar y añadir nuevos AGs aquí
+}
+
+def get_ga_instance(algorithm_name: str):
+    """
+    Obtiene una instancia del algoritmo genético especificado.
+
+    Args:
+        algorithm_name (str): El nombre del algoritmo registrado en AVAILABLE_ALGORITHMS.
+
+    Returns:
+        Una instancia de la clase del algoritmo genético, o None si no se encuentra.
+
+    Raises:
+        ValueError: Si el nombre del algoritmo no está registrado.
+    """
+    ga_class = AVAILABLE_ALGORITHMS.get(algorithm_name)
+    if ga_class:
+        return ga_class()
+    else:
+        raise ValueError(f"Algoritmo '{algorithm_name}' no encontrado. "
+                         f"Opciones disponibles: {list(AVAILABLE_ALGORITHMS.keys())}")
+
+def get_available_ga_names() -> list:
+    """
+    Devuelve una lista con los nombres de los algoritmos genéticos disponibles.
+    """
+    return list(AVAILABLE_ALGORITHMS.keys())
+
+if __name__ == '__main__':
+    print("Algoritmos Genéticos Disponibles:")
+    for name in get_available_ga_names():
+        print(f"- {name}")
+
+    print("\nProbando instanciar 'example_ga':")
+    try:
+        instance = get_ga_instance("example_ga")
+        print(f"Instancia creada: {instance}")
+    except ValueError as e:
+        print(e)
+
+    print("\nProbando instanciar 'standard_ga':")
+    try:
+        instance = get_ga_instance("standard_ga")
+        print(f"Instancia creada: {instance}")
+    except ValueError as e:
+        print(e)
+
+    print("\nProbando instanciar un AG no existente:")
+    try:
+        instance = get_ga_instance("non_existent_ga")
+        print(f"Instancia creada: {instance}")
+    except ValueError as e:
+        print(e)
+
+===== ./manager/README_FOR_NEW_ALGORITHMS.md =====
+
+# Guía para Integrar Nuevos Algoritmos Genéticos
+
+Este documento describe la interfaz y los requisitos que debe cumplir cualquier nueva implementación de un Algoritmo Genético (AG) para ser compatible con el sistema visualizador. El archivo `manager/ga_manager.py` es el encargado de gestionar estos algoritmos.
+
+## Estructura de Archivos
+
+1.  Cree una nueva carpeta dedicada para su algoritmo dentro del directorio principal del proyecto (al mismo nivel que `example_ga/`, `ui/`, etc.). Por ejemplo: `my_custom_ga/`.
+2.  Dentro de esta carpeta, incluya su archivo Python con la implementación del AG, por ejemplo, `my_custom_ga_logic.py`.
+3.  Asegúrese de tener un archivo `__init__.py` en su carpeta para que Python la reconozca como un paquete.
+
+## Interfaz de la Clase del AG
+
+Su clase de AG debe cumplir con la siguiente estructura:
+
+```python
+# En my_custom_ga/my_custom_ga_logic.py
+
+import random
+import numpy as np
+import tkinter as tk # Opcional, para progreso
+from tkinter import ttk # Opcional, para progreso
+from typing import List, Tuple, Dict, Any
+
+# CRUCIAL: Importar estas funciones para interactuar con la función objetivo definida en la UI
+from utils.math_functions import objective_function, get_raw_function_value, binary_to_decimal, get_function_provider
+
+class MyCustomGeneticAlgorithm:
+    def __init__(self):
+        """
+        Constructor de su AG. Puede inicializar parámetros internos aquí si es necesario.
+        """
+        pass
+
+    def run(self,
+            x_min: float,
+            x_max: float,
+            delta_x: float,
+            pop_size: int,
+            max_generations: int,
+            prob_crossover: float,
+            prob_mutation_i: float,  # Probabilidad de mutar un individuo
+            prob_mutation_g: float,  # Probabilidad de mutar un gen (si aplica a su mutación)
+            is_minimizing: bool,
+            progress_root_window: tk.Tk = None  # Opcional: para mostrar progreso
+            ) -> Dict[str, Any]:
+        """
+        Punto de entrada principal para ejecutar el algoritmo genético.
+
+        Args:
+            x_min (float): Límite inferior del intervalo de búsqueda para x.
+            x_max (float): Límite superior del intervalo de búsqueda para x.
+            delta_x (float): Precisión deseada para x. Usar para calcular n_bits.
+            pop_size (int): Tamaño de la población.
+            max_generations (int): Número máximo de generaciones.
+            prob_crossover (float): Probabilidad de cruzamiento.
+            prob_mutation_i (float): Probabilidad de mutación por individuo.
+            prob_mutation_g (float): Probabilidad de mutación por gen (o parámetro similar para su operador).
+            is_minimizing (bool): True si se busca minimizar la función objetivo, False si se busca maximizar.
+                                  La función `objective_function(x, is_minimizing)` ya maneja la inversión
+                                  del valor si es necesario para la lógica de minimización/maximización interna del AG.
+                                  Su AG debería, por lo general, intentar maximizar el valor devuelto por `objective_function`.
+            progress_root_window (tk.Tk, optional): Ventana raíz de Tkinter para crear diálogos de progreso.
+
+        Returns:
+            Dict[str, Any]: Un diccionario con los resultados del AG. Debe tener la siguiente estructura:
+            {
+                'ga_results': {
+                    'best_individual': List[int],  # El mejor individuo (lista de bits)
+                    'best_x': float,              # Valor 'x' decodificado del mejor individuo
+                    'best_fitness': float,        # Fitness REAL (valor crudo de f(x)) del mejor individuo
+                    'x_min': float,               # x_min usado
+                    'x_max': float,               # x_max usado
+                    'n_bits': int,                # Número de bits calculado y usado
+                    'pop_size': int,              # pop_size usado
+                    'generations': int,           # max_generations usado (o las reales si hubo corte temprano)
+                    'prob_crossover': float,      # prob_crossover usado
+                    'prob_mutation_i': float,     # prob_mutation_i usado
+                    'prob_mutation_g': float,     # prob_mutation_g usado
+                    'improvement': float,         # Mejora total (fitness_final_real - fitness_inicial_real o viceversa)
+                    'final_population': List[List[int]], # Población final (lista de individuos)
+                    'final_fitness': List[float], # Lista de fitness REALES de la población final
+                    'is_minimizing': bool,        # is_minimizing usado
+                    'function_text_for_report': str # TEXTO de la función objetivo que se utilizó.
+                                                     # Obtenerla de get_function_provider().function_text
+                },
+                'population_history': List[List[List[int]]], # Historial de poblaciones por generación
+                                                              # (lista de generaciones, cada una es una lista de individuos)
+                'fitness_history': List[List[float]],    # Historial de fitness REALES de cada individuo por generación
+                                                              # (lista de generaciones, cada una es una lista de fitness)
+                'best_fitness_history': List[float]      # Historial del MEJOR fitness REAL por generación
+            }
+        """
+
+        # 0. OBTENER LA FUNCIÓN OBJETIVO ACTUAL DEL PROVEEDOR GLOBAL
+        current_function_provider = get_function_provider()
+        function_text_used_by_ga = current_function_provider.function_text
+        # Esta `function_text_used_by_ga` DEBE ser devuelta en 'ga_results['function_text_for_report']'
+
+        # 1. CÁLCULO DE n_bits (basado en x_min, x_max, delta_x)
+        #    (Puede usar la misma lógica que en example_ga/genetic_algorithm.py)
+        if x_min == 0 and x_max == 31 and delta_x == 1.0: # Caso especial simplificado
+             n_bits = 5
+        elif x_min >= 0 and x_max == int(x_max) and delta_x == 1.0: # Otro caso para rangos enteros
+             range_size = int(x_max - x_min) + 1
+             n_bits = int(np.ceil(np.log2(range_size)))
+        else:
+             num_divisions = int((x_max - x_min) / delta_x)
+             n_bits = int(np.ceil(np.log2(num_divisions + 1)))
+
+
+        # 2. INICIALIZACIÓN
+        #    - Crear población inicial.
+        #    - Inicializar listas para `population_history`, `fitness_history`, `best_fitness_history`.
+
+        # 3. BUCLE DE GENERACIONES
+        #    - Para cada generación:
+        #        - Evaluar la población:
+        #            - Para cada individuo:
+        #                - Decodificar a `x_real` usando `binary_to_decimal(individuo, x_min, x_max, n_bits)`.
+        #                - Obtener fitness para la lógica del AG: `internal_fitness = objective_function(x_real, is_minimizing)`.
+        #                  Su AG generalmente intentará MAXIMIZAR este `internal_fitness`.
+        #                - Obtener fitness real para historial/reporte: `raw_fitness = get_raw_function_value(x_real)`.
+        #        - Guardar en `population_history` la población actual.
+        #        - Guardar en `fitness_history` la lista de `raw_fitness` de la población actual.
+        #        - Guardar en `best_fitness_history` el mejor `raw_fitness` de la generación actual.
+        #        - Aplicar selección, cruzamiento, mutación para crear la nueva población.
+        #        - Actualizar barra de progreso (opcional, si `progress_root_window` se proporciona).
+
+        # 4. POST-PROCESAMIENTO
+        #    - Determinar el mejor individuo de la población final.
+        #    - Calcular `best_x`, `best_fitness` (real).
+        #    - Calcular `improvement`.
+        #    - Ensamblar el diccionario de resultados como se especificó arriba.
+        #      Asegúrese de que 'ga_results' incluye 'function_text_for_report': function_text_used_by_ga
+
+        # Ejemplo de retorno (debe ser completado con datos reales):
+        # dummy_best_individual = [0] * n_bits
+        # dummy_population = [dummy_best_individual] * pop_size
+        # dummy_raw_fitness_list = [0.0] * pop_size
+
+        # results = {
+        #     'ga_results': {
+        #         'best_individual': dummy_best_individual,
+        #         'best_x': x_min,
+        #         'best_fitness': 0.0, # Usar get_raw_function_value() para el mejor
+        #         'x_min': x_min, 'x_max': x_max, 'n_bits': n_bits,
+        #         'pop_size': pop_size, 'generations': max_generations,
+        #         'prob_crossover': prob_crossover,
+        #         'prob_mutation_i': prob_mutation_i, 'prob_mutation_g': prob_mutation_g,
+        #         'improvement': 0.0,
+        #         'final_population': dummy_population,
+        #         'final_fitness': dummy_raw_fitness_list,
+        #         'is_minimizing': is_minimizing,
+        #         'function_text_for_report': function_text_used_by_ga
+        #     },
+        #     'population_history': [dummy_population] * max_generations,
+        #     'fitness_history': [dummy_raw_fitness_list] * max_generations,
+        #     'best_fitness_history': [0.0] * max_generations
+        # }
+        # return results
+        raise NotImplementedError("El método run debe ser implementado por la subclase.")
+
+    # Puede añadir métodos auxiliares aquí (crear_individuo, cruzamiento, mutación, etc.)
+    # como en example_ga/genetic_algorithm.py
