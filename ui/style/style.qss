@@ -79,3 +79,9 @@ QRadioButton::indicator, QCheckBox::indicator {
     width: 16px;
     height: 16px;
 }
+
+QPushButton[selected="true"] {
+    background-color: #005C99; /* Color más oscuro o diferente para indicar selección */
+    border: 2px solid #007ACC; /* Un borde resaltado */
+    color: white; /* Asegurar que el texto sea legible */
+}

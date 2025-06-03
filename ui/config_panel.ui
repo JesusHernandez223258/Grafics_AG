@@ -325,6 +325,73 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="graphSelectionGroup">
+     <property name="title">
+      <string>Seleccionar Gráfica</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_graphs">
+      <item>
+       <widget class="QPushButton" name="objectiveGraphButton">
+        <property name="text">
+         <string>Función Objetivo</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="bestEvolutionGraphButton">
+        <property name="text">
+         <string>Evolución Mejor</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="allEvolutionGraphButton">
+        <property name="text">
+         <string>Evolución Población</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="animatedEvolutionButton">
+        <property name="text">
+         <string>Evolución Animada</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="actionsGroup">
+     <property name="title">
+      <string>Acciones</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_actions">
+      <item>
+       <widget class="QPushButton" name="generateReportButton">
+        <property name="text">
+         <string>Generar Reporte</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="downloadAnimationButton">
+        <property name="text">
+         <string>Descargar Animación</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="clearResultsButton">
+        <property name="text">
+         <string>Limpiar Resultados</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Orientation::Vertical</enum>

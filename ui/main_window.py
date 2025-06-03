@@ -9,15 +9,15 @@ Ventana principal de la aplicación - Visualizador de Resultados de AG (Versión
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QSplitter, QMessageBox, QVBoxLayout, QFileDialog, QProgressDialog
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+# from PySide6.QtGui import QDesktopServices # No se usa directamente aquí si open_file lo maneja
 
 # Asegúrate de que estas importaciones apunten a las versiones PySide6 de tus paneles
 from ui.config_panel import ConfigPanel
-from ui.visualization_panel import VisualizationPanel
+from ui.visualization_panel import VisualizationPanel # Asumimos que este es PySide6
 from utils.export import ReportGenerator, AnimationGenerator
 from utils.math_functions import set_function_provider
 # Asegúrate que CustomFunctionProvider es la versión adaptada para PySide6/Sympy
-from ui.function_editor import CustomFunctionProvider, FunctionEditor
+from ui.function_editor import CustomFunctionProvider, FunctionEditor # Asumimos que FunctionEditor es PySide6
 from utils.helpers import open_file # Usaremos el helper para abrir archivos
 
 class MainWindow(QMainWindow):
@@ -36,13 +36,23 @@ class MainWindow(QMainWindow):
         self.best_fitness_history = []
 
         self.report_generator = ReportGenerator()
-        self.animation_generator = AnimationGenerator()
-        self.ui_function_provider = CustomFunctionProvider() # Esta es tu clase adaptada
+        self.animation_generator = AnimationGenerator() # Asegúrate que usa QMessageBox/QProgressDialog
+        self.ui_function_provider = CustomFunctionProvider()
         set_function_provider(self.ui_function_provider)
 
         self.ga_executor = None
+        
+        # Inicializar los paneles a None primero
+        self.config_panel = None
+        self.visualization_panel = None
 
         self.create_interface()
+
+        # Llamar a disable_buttons DESPUÉS de que create_interface haya completado
+        # y ambos paneles (config_panel y visualization_panel) existan.
+        if self.config_panel:
+            self.config_panel.disable_buttons() # Establece el estado inicial correcto
+
 
     def create_interface(self):
         """Crea la interfaz dividida en dos paneles usando QSplitter"""
@@ -54,11 +64,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.main_splitter)
 
         # Panel izquierdo (Configuración)
-        # Creamos un QWidget que actuará como contenedor para el ConfigPanel
         self.left_pane_container = QWidget()
-        left_layout = QVBoxLayout(self.left_pane_container) # Layout para el contenedor
-        left_layout.setContentsMargins(0,0,0,0) # Para que ConfigPanel lo llene
-        # ConfigPanel se añade a este QWidget contenedor
+        left_layout = QVBoxLayout(self.left_pane_container)
+        left_layout.setContentsMargins(0,0,0,0)
         self.config_panel = ConfigPanel(self.left_pane_container, self, self.ui_function_provider)
         left_layout.addWidget(self.config_panel)
         self.main_splitter.addWidget(self.left_pane_container)
@@ -71,27 +79,21 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.visualization_panel)
         self.main_splitter.addWidget(self.right_pane_container)
 
-        # Ajustar tamaños iniciales y políticas de expansión
-        self.main_splitter.setSizes([420, self.width() - 450]) # Tamaños iniciales aproximados
-        self.main_splitter.setStretchFactor(0, 0) # Panel izquierdo no se estira tanto
-        self.main_splitter.setStretchFactor(1, 1) # Panel derecho se estira más
+        self.main_splitter.setSizes([420, self.width() - 450])
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
 
     def run_example_algorithm(self, params: dict):
-        """Ejecuta el algoritmo genético configurado con los parámetros proporcionados"""
         if not self.ga_executor:
             QMessageBox.critical(self, "Error", "No se ha configurado un ejecutor de Algoritmo Genético.")
             return
 
-        # Mostrar un diálogo de progreso simple
         progress_dialog = QProgressDialog("Ejecutando AG...", "Cancelar", 0, 0, self)
         progress_dialog.setWindowModality(Qt.WindowModal)
         progress_dialog.setWindowTitle("Procesando")
         progress_dialog.show()
-        # QApplication.processEvents() # Para que se muestre inmediatamente
 
         try:
-            # Pasamos 'self' (la QMainWindow) como ventana padre para el AG,
-            # por si el AG necesita crear sus propios diálogos de progreso Qt.
             results = self.ga_executor(params, self)
 
             if results is None:
@@ -103,25 +105,22 @@ class MainWindow(QMainWindow):
             self.fitness_history = results['fitness_history']
             self.best_fitness_history = results['best_fitness_history']
 
-            # Actualizar la función en la UI si el AG la reporta
             function_text_from_ga = self.ga_results.get('function_text_for_report')
-            if function_text_from_ga:
-                # Usamos el FunctionEditor de PySide6 para validar y obtener la función compilada
-                temp_editor = FunctionEditor(self) # 'self' es el padre QMainWindow
-                temp_editor.function_entry.setText(function_text_from_ga) # Asumimos que FunctionEditor tiene 'function_entry'
-                is_valid = temp_editor.validate_function()
-                if is_valid:
-                    # Asumimos que validate_function en FunctionEditor actualiza self.compiled_function_result
-                    self.ui_function_provider.set_function(function_text_from_ga, temp_editor.compiled_function_result)
-                    self.config_panel.update_function_display() # ConfigPanel debe tener este método
+            if function_text_from_ga and self.config_panel: # Verificar config_panel
+                # Asumiendo que FunctionEditor es un QDialog
+                temp_editor = FunctionEditor(self)
+                if hasattr(temp_editor, 'function_entry'):
+                    temp_editor.function_entry.setText(function_text_from_ga)
+                    is_valid = temp_editor.validate_function()
+                    if is_valid and hasattr(temp_editor, 'compiled_function_result'):
+                        self.ui_function_provider.set_function(function_text_from_ga, temp_editor.compiled_function_result)
+                        self.config_panel.update_function_display()
+                    elif not is_valid:
+                        QMessageBox.critical(self, "Error de Función", "La función reportada por el AG no pudo ser validada por la UI.")
                 else:
-                    QMessageBox.critical(self, "Error de Función",
-                                         "La función reportada por el AG no pudo ser validada por la UI.")
-                # temp_editor.destroy() # No es necesario, se cierra con el scope o si es modal
-            else:
-                QMessageBox.warning(self, "Advertencia", "El AG no reportó la función objetivo utilizada.")
+                     QMessageBox.warning(self, "Advertencia", "Editor de funciones no compatible para actualización automática.")
 
-            self.config_panel.enable_buttons() # ConfigPanel debe tener este método
+            if self.config_panel: self.config_panel.enable_buttons()
             mode_text = "Minimización" if params['is_minimizing'] else "Maximización"
             QMessageBox.information(self, "Completado",
                                 f"Algoritmo de ejemplo completado! ({mode_text})\n\n"
@@ -136,63 +135,55 @@ class MainWindow(QMainWindow):
             progress_dialog.close()
 
 
-    def generate_report(self): # Ya no necesita 'filename' como argumento directo
+    def generate_report(self):
         if not self.ga_results:
             QMessageBox.warning(self, "Advertencia", "No hay resultados para generar el reporte.")
             return False
 
-        # Usar QFileDialog para obtener el nombre del archivo
         filename, selected_filter = QFileDialog.getSaveFileName(
-            self,
-            "Guardar Reporte",
-            "", # Directorio inicial (opcional)
-            "Text files (*.txt);;All files (*.*)"
+            self, "Guardar Reporte", "", "Text files (*.txt);;All files (*.*)"
         )
-        if not filename: # El usuario canceló
-            return False
+        if not filename: return False
 
         try:
             self.report_generator.generate(
-                filename,
-                self.ga_results,
-                self.best_fitness_history
+                filename, self.ga_results, self.best_fitness_history
             )
             QMessageBox.information(self, "Reporte Guardado", f"Reporte guardado en:\n{filename}")
             if QMessageBox.question(self, "Abrir Reporte", "¿Desea abrir el reporte generado?") == QMessageBox.Yes:
-                open_file(filename) # Usar el helper
+                # utils.helpers.open_file debe ser compatible con PySide6 (no usar tkinter.messagebox)
+                if not open_file(filename):
+                     QMessageBox.warning(self, "Abrir Archivo", "No se pudo abrir el archivo automáticamente.")
             return True
         except Exception as e:
             QMessageBox.critical(self, "Error de Reporte", f"Error al generar el reporte: {str(e)}")
             return False
 
 
-    def save_animation(self): # Ya no necesita 'filename' como argumento directo
+    def save_animation(self):
         if not self.ga_results:
             QMessageBox.warning(self, "Advertencia", "Primero debe ejecutar el algoritmo.")
             return False
 
         filename, selected_filter = QFileDialog.getSaveFileName(
-            self,
-            "Guardar Animación",
-            "",
-            "MP4 files (*.mp4);;GIF files (*.gif);;All files (*.*)"
+            self, "Guardar Animación", "", "MP4 files (*.mp4);;GIF files (*.gif);;All files (*.*)"
         )
-        if not filename:
-            return False
+        if not filename: return False
 
         try:
-            # El AnimationGenerator ya maneja su propio diálogo de progreso y QMessageBox
-            # Pasamos 'self' como ventana raíz para que los diálogos del generador sean modales a esta.
+            # AnimationGenerator debe usar QMessageBox y QProgressDialog internamente
+            # o devolver un estado para que MainWindow lo maneje.
             success = self.animation_generator.generate(
-                filename,
-                self.best_fitness_history,
-                self.ga_results['is_minimizing'],
-                self # QWidget padre para los diálogos del AnimationGenerator
+                filename, self.best_fitness_history, self.ga_results['is_minimizing'], self
             )
-            # Nota: AnimationGenerator debería mostrar su propio QMessageBox de éxito/error
+            # Si AnimationGenerator no muestra su propio mensaje, hazlo aquí
+            # if success:
+            #     QMessageBox.information(self, "Animación Guardada", f"Animación guardada en:\n{filename}")
+            #     if QMessageBox.question(self, "Abrir Animación", "¿Desea abrir la animación generada?") == QMessageBox.Yes:
+            #         if not open_file(filename):
+            #             QMessageBox.warning(self, "Abrir Archivo", "No se pudo abrir el archivo automáticamente.")
             return success
         except Exception as e:
-            # Esto es un fallback si AnimationGenerator no maneja su propia excepción
             QMessageBox.critical(self, "Error de Animación", f"Error al generar la animación: {str(e)}")
             return False
 
@@ -202,12 +193,17 @@ class MainWindow(QMainWindow):
         self.population_history = []
         self.fitness_history = []
         self.best_fitness_history = []
-        self.visualization_panel.clear_graph_area()
-        self.visualization_panel.create_welcome_message() # Recrear mensaje de bienvenida
-        self.config_panel.disable_buttons() # ConfigPanel debe tener este método
+        
+        if self.visualization_panel:
+            self.visualization_panel.clear_graph_area()
+            self.visualization_panel.create_welcome_message()
+
+        if self.config_panel:
+            self.config_panel.disable_buttons()
+            self.config_panel.update_graph_button_selection(None)
+
         QMessageBox.information(self, "Resultados Limpiados", "Todos los resultados han sido limpiados.")
 
-    # El método run() ya no es necesario aquí, QApplication.exec() en main.py lo maneja.
 
     def set_ga_executor(self, executor_func):
         self.ga_executor = executor_func

@@ -235,6 +235,55 @@ class Ui_ConfigPanelWidget(object):
 
         self.mainVerticalLayout.addWidget(self.execute_ag_btn)
 
+        self.graphSelectionGroup = QGroupBox(ConfigPanelWidget)
+        self.graphSelectionGroup.setObjectName(u"graphSelectionGroup")
+        self.verticalLayout_graphs = QVBoxLayout(self.graphSelectionGroup)
+        self.verticalLayout_graphs.setObjectName(u"verticalLayout_graphs")
+        self.objectiveGraphButton = QPushButton(self.graphSelectionGroup)
+        self.objectiveGraphButton.setObjectName(u"objectiveGraphButton")
+
+        self.verticalLayout_graphs.addWidget(self.objectiveGraphButton)
+
+        self.bestEvolutionGraphButton = QPushButton(self.graphSelectionGroup)
+        self.bestEvolutionGraphButton.setObjectName(u"bestEvolutionGraphButton")
+
+        self.verticalLayout_graphs.addWidget(self.bestEvolutionGraphButton)
+
+        self.allEvolutionGraphButton = QPushButton(self.graphSelectionGroup)
+        self.allEvolutionGraphButton.setObjectName(u"allEvolutionGraphButton")
+
+        self.verticalLayout_graphs.addWidget(self.allEvolutionGraphButton)
+
+        self.animatedEvolutionButton = QPushButton(self.graphSelectionGroup)
+        self.animatedEvolutionButton.setObjectName(u"animatedEvolutionButton")
+
+        self.verticalLayout_graphs.addWidget(self.animatedEvolutionButton)
+
+
+        self.mainVerticalLayout.addWidget(self.graphSelectionGroup)
+
+        self.actionsGroup = QGroupBox(ConfigPanelWidget)
+        self.actionsGroup.setObjectName(u"actionsGroup")
+        self.verticalLayout_actions = QVBoxLayout(self.actionsGroup)
+        self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
+        self.generateReportButton = QPushButton(self.actionsGroup)
+        self.generateReportButton.setObjectName(u"generateReportButton")
+
+        self.verticalLayout_actions.addWidget(self.generateReportButton)
+
+        self.downloadAnimationButton = QPushButton(self.actionsGroup)
+        self.downloadAnimationButton.setObjectName(u"downloadAnimationButton")
+
+        self.verticalLayout_actions.addWidget(self.downloadAnimationButton)
+
+        self.clearResultsButton = QPushButton(self.actionsGroup)
+        self.clearResultsButton.setObjectName(u"clearResultsButton")
+
+        self.verticalLayout_actions.addWidget(self.clearResultsButton)
+
+
+        self.mainVerticalLayout.addWidget(self.actionsGroup)
+
         self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.mainVerticalLayout.addItem(self.verticalSpacer)
@@ -271,5 +320,14 @@ class Ui_ConfigPanelWidget(object):
         self.label_max_decimal.setText(QCoreApplication.translate("ConfigPanelWidget", u"M\u00e1x. Decimal:", None))
         self.max_decimal_label.setText(QCoreApplication.translate("ConfigPanelWidget", u"...", None))
         self.execute_ag_btn.setText(QCoreApplication.translate("ConfigPanelWidget", u"EJECUTAR AG DE EJEMPLO", None))
+        self.graphSelectionGroup.setTitle(QCoreApplication.translate("ConfigPanelWidget", u"Seleccionar Gr\u00e1fica", None))
+        self.objectiveGraphButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Funci\u00f3n Objetivo", None))
+        self.bestEvolutionGraphButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Evoluci\u00f3n Mejor", None))
+        self.allEvolutionGraphButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Evoluci\u00f3n Poblaci\u00f3n", None))
+        self.animatedEvolutionButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Evoluci\u00f3n Animada", None))
+        self.actionsGroup.setTitle(QCoreApplication.translate("ConfigPanelWidget", u"Acciones", None))
+        self.generateReportButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Generar Reporte", None))
+        self.downloadAnimationButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Descargar Animaci\u00f3n", None))
+        self.clearResultsButton.setText(QCoreApplication.translate("ConfigPanelWidget", u"Limpiar Resultados", None))
     # retranslateUi
 
