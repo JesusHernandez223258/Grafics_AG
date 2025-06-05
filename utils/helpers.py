@@ -10,6 +10,8 @@ import platform
 import subprocess
 import tkinter as tk
 from tkinter import messagebox
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
 
 def show_progress_window(parent, title="Procesando...", message="Por favor espere...", progress_mode='indeterminate'):
     """Crea una ventana de progreso para operaciones largas
@@ -53,28 +55,14 @@ def show_progress_window(parent, title="Procesando...", message="Por favor esper
     return progress_window, progress_bar, progress_label
 
 def open_file(filepath):
-    """Abre un archivo con la aplicación predeterminada del sistema
-    
-    Args:
-        filepath: Ruta al archivo a abrir
-    
-    Returns:
-        bool: True si se pudo abrir el archivo, False en caso contrario
-    """
+    """Abre un archivo con la aplicación predeterminada del sistema (versión Qt)"""
     if not os.path.exists(filepath):
         return False
-        
     try:
-        if platform.system() == 'Windows':
-            os.startfile(filepath)
-        elif platform.system() == 'Darwin':  # macOS
-            subprocess.run(['open', filepath])
-        else:  # Linux y otros
-            subprocess.run(['xdg-open', filepath])
-        return True
+        url = QUrl.fromLocalFile(os.path.abspath(filepath))
+        return QDesktopServices.openUrl(url)
     except Exception as e:
-        messagebox.showwarning("Advertencia", 
-                             f"No se pudo abrir el archivo automáticamente: {str(e)}")
+        print(f"Advertencia: No se pudo abrir el archivo automáticamente: {str(e)}")
         return False
 
 def validate_numeric_input(value, min_value=None, max_value=None, allow_negative=True, allow_float=True):

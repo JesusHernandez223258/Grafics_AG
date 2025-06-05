@@ -1,0 +1,87 @@
+/* style.qss */
+QWidget {
+    background-color: #2E2E2E;
+    color: #E0E0E0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow, QDialog {
+    background-color: #2E2E2E;
+}
+
+QGroupBox {
+    border: 1px solid #4A4A4A;
+    border-radius: 5px;
+    margin-top: 10px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px 0 5px;
+    color: #B0B0B0;
+}
+
+QPushButton {
+    background-color: #4A4A4A;
+    border: 1px solid #5A5A5A;
+    padding: 6px 12px;
+    border-radius: 4px;
+    min-height: 20px;
+}
+QPushButton:hover {
+    background-color: #5A5A5A;
+}
+QPushButton:pressed {
+    background-color: #3A3A3A;
+}
+QPushButton#execute_ag_btn {
+    background-color: #007ACC;
+    color: white;
+    font-weight: bold;
+}
+QPushButton#execute_ag_btn:hover {
+    background-color: #005C99;
+}
+
+QLineEdit, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox {
+    background-color: #3C3C3C;
+    border: 1px solid #5A5A5A;
+    padding: 4px;
+    border-radius: 3px;
+}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus {
+    border: 1px solid #007ACC;
+}
+
+QScrollArea {
+    border: none;
+}
+
+QScrollBar:vertical {
+    border: 1px solid #4A4A4A;
+    background: #3C3C3C;
+    width: 12px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #5A5A5A;
+    min-height: 20px;
+    border-radius: 6px;
+}
+
+QLabel {
+    background-color: transparent;
+}
+
+QRadioButton::indicator, QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QPushButton[selected="true"] {
+    background-color: #005C99; /* Color más oscuro o diferente para indicar selección */
+    border: 2px solid #007ACC; /* Un borde resaltado */
+    color: white; /* Asegurar que el texto sea legible */
+}

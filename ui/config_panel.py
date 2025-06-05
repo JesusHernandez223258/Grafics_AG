@@ -4,345 +4,398 @@
 """
 Panel de configuración de la aplicación
 """
-
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QScrollArea, QDoubleSpinBox, QPushButton,
+    QLabel, QMessageBox, QSpinBox, QRadioButton, QGroupBox
+)
+from PySide6.QtUiTools import QUiLoader
+from PySide6.QtCore import QFile, QIODevice, Qt
+from utils.math_functions import set_function_provider
 import numpy as np
-from utils.math_functions import set_function_provider  # Para asegurar que el provider global se actualice
 
-class ConfigPanel:
+class ConfigPanel(QWidget):
     """Clase que maneja el panel de configuración (izquierdo)"""
-    
-    # Se le pasa el function_provider desde MainWindow
-    def __init__(self, parent, main_window, function_provider_instance):
-        self.parent = parent
+
+    def __init__(self, parent_widget, main_window, function_provider_instance):
+        super().__init__(parent_widget)
         self.main_window = main_window
-        self.function_provider = function_provider_instance  # Usar el provider de MainWindow
-        set_function_provider(self.function_provider)  # Asegurarse de que math_functions use este provider
+        self.function_provider = function_provider_instance
+        set_function_provider(self.function_provider)
+
+        # Inicializar TODOS los atributos de widgets a None ANTES de cargar la UI
+        self.interval_a_spinbox = None
+        self.interval_b_spinbox = None
+        self.delta_x_spinbox = None
+        self.pop_size_spinbox = None
+        self.num_generations_spinbox = None
+        self.prob_crossover_spinbox = None
+        self.prob_mutation_i_spinbox = None
+        self.prob_mutation_g_spinbox = None
+        self.minimize_radio = None
+        self.maximize_radio = None
+        self.function_display_label = None
+        self.num_points_label = None
+        self.num_bits_label = None
+        self.max_decimal_label = None
+        self.editFunctionButton = None
+        self.execute_ag_btn = None
+        self.scrollable_widget_content = None
+
+        # Nuevos botones
+        self.objectiveGraphButton = None
+        self.bestEvolutionGraphButton = None
+        self.allEvolutionGraphButton = None
+        self.animatedEvolutionButton = None
+        self.generateReportButton = None
+        self.downloadAnimationButton = None
+        self.clearResultsButton = None
+        self.graph_buttons_list = []
+
+
+        ui_loaded_successfully = self.init_ui_from_designer()
+
+        if ui_loaded_successfully:
+            # Conecta señales
+            if self.interval_a_spinbox:
+                self.interval_a_spinbox.valueChanged.connect(self.update_calculated_values)
+            if self.interval_b_spinbox:
+                self.interval_b_spinbox.valueChanged.connect(self.update_calculated_values)
+            if self.delta_x_spinbox:
+                self.delta_x_spinbox.valueChanged.connect(self.update_calculated_values)
+
+            if self.editFunctionButton:
+                self.editFunctionButton.clicked.connect(self.open_function_editor)
+            if self.execute_ag_btn:
+                self.execute_ag_btn.clicked.connect(self.run_example_algorithm_from_config)
+
+            # Conexiones para nuevos botones
+            if self.objectiveGraphButton:
+                self.objectiveGraphButton.clicked.connect(lambda: self.show_graph_slot("objective"))
+            if self.bestEvolutionGraphButton:
+                self.bestEvolutionGraphButton.clicked.connect(lambda: self.show_graph_slot("evolution_best"))
+            if self.allEvolutionGraphButton:
+                self.allEvolutionGraphButton.clicked.connect(lambda: self.show_graph_slot("evolution_all"))
+            if self.animatedEvolutionButton:
+                self.animatedEvolutionButton.clicked.connect(self.start_animation_slot)
+
+            if self.generateReportButton:
+                self.generateReportButton.clicked.connect(self.generate_report_slot)
+            if self.downloadAnimationButton:
+                self.downloadAnimationButton.clicked.connect(self.save_animation_slot)
+            if self.clearResultsButton:
+                self.clearResultsButton.clicked.connect(self.clear_results_slot)
+
+            self.update_function_display()
+            self.update_calculated_values()
+            # self.disable_buttons() # Se llama desde MainWindow.__init__ después de que todo está creado
+        else:
+            print("ConfigPanel UI failed to load. Panel functionality will be limited.")
+            # self.disable_buttons() # Podría ser necesario si la UI falla gravemente
+
+
+    def init_ui_from_designer(self):
+        outer_layout = QVBoxLayout() # No pasar 'self' aquí si se va a setear el layout luego
+        self.setLayout(outer_layout)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        outer_layout.addWidget(scroll_area)
+
+        loader = QUiLoader()
+        ui_file_path = "ui/config_panel.ui"
+        ui_file = QFile(ui_file_path)
+
+        if not ui_file.open(QIODevice.ReadOnly):
+            print(f"Cannot open UI file: {ui_file_path} - {ui_file.errorString()}")
+            QMessageBox.critical(self, "UI Load Error", f"Could not load {ui_file_path}.\nEnsure the file exists and the path is correct relative to the execution directory (AG-main).")
+            return False
+
+        self.scrollable_widget_content = loader.load(ui_file, self)
+        ui_file.close()
+
+        if not self.scrollable_widget_content:
+            print(f"Error loading UI file {ui_file_path}: {loader.errorString()}")
+            QMessageBox.critical(self, "UI Load Error", f"Error parsing {ui_file_path}: {loader.errorString()}")
+            return False
+
+        scroll_area.setWidget(self.scrollable_widget_content)
+
+        # --- Acceso a widgets del .ui ---
+        self.interval_a_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "interval_a_spinbox")
+        self.interval_b_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "interval_b_spinbox")
+        self.delta_x_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "delta_x_spinbox")
+        self.pop_size_spinbox = self.scrollable_widget_content.findChild(QSpinBox, "pop_size_spinbox")
+        self.num_generations_spinbox = self.scrollable_widget_content.findChild(QSpinBox, "num_generations_spinbox")
+        self.prob_crossover_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "prob_crossover_spinbox")
+        self.prob_mutation_i_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "prob_mutation_i_spinbox")
+        self.prob_mutation_g_spinbox = self.scrollable_widget_content.findChild(QDoubleSpinBox, "prob_mutation_g_spinbox")
+        self.minimize_radio = self.scrollable_widget_content.findChild(QRadioButton, "minimize_radio")
+        self.maximize_radio = self.scrollable_widget_content.findChild(QRadioButton, "maximize_radio")
+        self.function_display_label = self.scrollable_widget_content.findChild(QLabel, "functionDisplayLabel")
+        self.num_points_label = self.scrollable_widget_content.findChild(QLabel, "num_points_label")
+        self.num_bits_label = self.scrollable_widget_content.findChild(QLabel, "num_bits_label")
+        self.max_decimal_label = self.scrollable_widget_content.findChild(QLabel, "max_decimal_label")
+        self.editFunctionButton = self.scrollable_widget_content.findChild(QPushButton, "editFunctionButton")
+        self.execute_ag_btn = self.scrollable_widget_content.findChild(QPushButton, "execute_ag_btn")
+
+        # --- Acceso a botones añadidos al .ui (si se hizo con Designer) ---
+        self.objectiveGraphButton = self.scrollable_widget_content.findChild(QPushButton, "objectiveGraphButton")
+        self.bestEvolutionGraphButton = self.scrollable_widget_content.findChild(QPushButton, "bestEvolutionGraphButton")
+        self.allEvolutionGraphButton = self.scrollable_widget_content.findChild(QPushButton, "allEvolutionGraphButton")
+        self.animatedEvolutionButton = self.scrollable_widget_content.findChild(QPushButton, "animatedEvolutionButton")
+        self.generateReportButton = self.scrollable_widget_content.findChild(QPushButton, "generateReportButton")
+        self.downloadAnimationButton = self.scrollable_widget_content.findChild(QPushButton, "downloadAnimationButton")
+        self.clearResultsButton = self.scrollable_widget_content.findChild(QPushButton, "clearResultsButton")
         
-        self.interval_a = tk.DoubleVar(value=-43.90)
-        self.interval_b = tk.DoubleVar(value=-35.70)
-        self.delta_x = tk.DoubleVar(value=0.08)
-        self.pop_size = tk.IntVar(value=20)
-        self.num_generations = tk.IntVar(value=100)
-        self.prob_crossover = tk.DoubleVar(value=0.90)
-        self.prob_mutation_i = tk.DoubleVar(value=0.25)
-        self.prob_mutation_g = tk.DoubleVar(value=0.25)
-        self.is_minimizing = tk.BooleanVar(value=True)
-        self.num_points = tk.StringVar(value="...")
-        self.num_bits = tk.StringVar(value="...")
-        self.max_decimal = tk.StringVar(value="...")
-        self.selected_graph = tk.StringVar(value="none")
-        self.graph_buttons = []
-        
-        self.create_config_panel()
-        self.update_function_display()  # Para mostrar la función inicial del provider
-        self.update_calculated_values()
-        
+        # Llenar graph_buttons_list
+        if self.objectiveGraphButton: self.graph_buttons_list.append(self.objectiveGraphButton)
+        if self.bestEvolutionGraphButton: self.graph_buttons_list.append(self.bestEvolutionGraphButton)
+        if self.allEvolutionGraphButton: self.graph_buttons_list.append(self.allEvolutionGraphButton)
+        if self.animatedEvolutionButton: self.graph_buttons_list.append(self.animatedEvolutionButton)
+
+        # Verificar que los widgets esenciales (del .ui original y los nuevos) fueron encontrados
+        essential_widgets_map = {
+            "interval_a_spinbox": self.interval_a_spinbox,
+            "interval_b_spinbox": self.interval_b_spinbox,
+            "delta_x_spinbox": self.delta_x_spinbox, "pop_size_spinbox": self.pop_size_spinbox,
+            "num_generations_spinbox": self.num_generations_spinbox,
+            "prob_crossover_spinbox": self.prob_crossover_spinbox,
+            "prob_mutation_i_spinbox": self.prob_mutation_i_spinbox,
+            "prob_mutation_g_spinbox": self.prob_mutation_g_spinbox,
+            "minimize_radio": self.minimize_radio, "functionDisplayLabel": self.function_display_label,
+            "num_points_label": self.num_points_label, "num_bits_label": self.num_bits_label,
+            "max_decimal_label": self.max_decimal_label, "editFunctionButton": self.editFunctionButton,
+            "execute_ag_btn": self.execute_ag_btn,
+            "objectiveGraphButton": self.objectiveGraphButton,
+            "generateReportButton": self.generateReportButton,
+            "clearResultsButton": self.clearResultsButton
+        }
+
+        all_essentials_found = True
+        for name, widget_instance in essential_widgets_map.items():
+            if not widget_instance:
+                print(f"CRITICAL ERROR: Widget '{name}' not found in config_panel.ui. Check objectName in Qt Designer.")
+                all_essentials_found = False
+
+        if not all_essentials_found:
+            QMessageBox.critical(self, "UI Incompleta", "Faltan componentes críticos en la UI. Corrige el archivo .ui antes de continuar.")
+            raise RuntimeError("UI incompleta: faltan widgets críticos.")
+            
+        return True
+
+
     def open_function_editor(self):
         from ui.function_editor import FunctionEditor
-        
-        def on_function_accept(function_text, compiled_function):
-            self.function_provider.set_function(function_text, compiled_function)
-            set_function_provider(self.function_provider)  # Actualizar el provider global
-            self.update_function_display()
-            messagebox.showinfo("Función Actualizada", 
-                              "La función objetivo ha sido actualizada para el visualizador y el AG de ejemplo.")
-        
-        FunctionEditor(self.parent, on_function_accept, initial_function=self.function_provider.function_text)
-    
-    def update_function_display(self):
-        function_text = self.function_provider.function_text
-        display_text = function_text.replace('*', '·')
-        self.function_display.config(text=f"f(x) = {display_text}")
-    
-    def create_config_panel(self):
-        canvas = tk.Canvas(self.parent, bg='white', highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.parent, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg='white')
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
-        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        title_label = tk.Label(scrollable_frame, text="Configuración", 
-                              font=("Arial", 16, "bold"), bg='white')
-        title_label.pack(pady=10)
-        
-        function_frame = tk.LabelFrame(scrollable_frame, text="Función Objetivo (para AG de Ejemplo y Visualizador)", 
-                                    font=("Arial", 12, "bold"), 
-                                    bg='white', padx=10, pady=10)
-        function_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.function_display = tk.Label(function_frame, 
-                                        text="",  # Se actualizará en update_function_display
-                                        font=("Consolas", 10), bg='white',
-                                        wraplength=380, justify="left")
-        self.function_display.pack(fill="x", pady=5)
-        
-        edit_function_btn = tk.Button(function_frame, text="Editar Función", 
-                                    command=self.open_function_editor,
-                                    bg='#2196F3', fg='white', 
-                                    font=("Arial", 11, "bold"))
-        edit_function_btn.pack(fill="x", pady=5)
-        
-        config_frame = tk.LabelFrame(scrollable_frame, text="Parámetros (para AG de Ejemplo)", 
-                                    font=("Arial", 12, "bold"), 
-                                    bg='white', padx=10, pady=10)
-        config_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.create_labeled_entry(config_frame, "Intervalo A:", self.interval_a)
-        self.create_labeled_entry(config_frame, "Intervalo B:", self.interval_b)
-        self.create_labeled_entry(config_frame, "Δx:", self.delta_x)
-        self.create_labeled_entry(config_frame, "Población:", self.pop_size)
-        self.create_labeled_entry(config_frame, "Generaciones:", self.num_generations)
-        self.create_labeled_entry(config_frame, "Prob. Cruzamiento:", self.prob_crossover)
-        self.create_labeled_entry(config_frame, "PMI (Individuo):", self.prob_mutation_i)
-        self.create_labeled_entry(config_frame, "PMG (Gen):", self.prob_mutation_g)
-        
-        optimization_frame = tk.Frame(config_frame, bg='white')
-        optimization_frame.pack(fill="x", pady=5)
-        tk.Label(optimization_frame, text="Modo de optimización:", 
-                bg='white', font=("Arial", 10, "bold")).pack(side="left", padx=5)
-        tk.Radiobutton(optimization_frame, text="Minimizar", variable=self.is_minimizing, 
-                      value=True, bg='white').pack(side="left", padx=5)
-        tk.Radiobutton(optimization_frame, text="Maximizar", variable=self.is_minimizing, 
-                      value=False, bg='white').pack(side="left", padx=5)
-        
-        info_frame = tk.LabelFrame(config_frame, text="Parámetros Calculados", 
-                                  font=("Arial", 10, "bold"), bg='white')
-        info_frame.pack(fill="x", pady=10)
-        self.create_info_display(info_frame, "# Puntos:", self.num_points)
-        self.create_info_display(info_frame, "# Bits:", self.num_bits)
-        self.create_info_display(info_frame, "Máx. Decimal:", self.max_decimal)
-        
-        execute_btn = tk.Button(config_frame, text="EJECUTAR AG DE EJEMPLO",
-                               command=self.run_example_algorithm_from_config,
-                               bg='#4CAF50', fg='white', 
-                               font=("Arial", 12, "bold"),
-                               height=2)
-        execute_btn.pack(fill="x", pady=20)
-        
-        separator = tk.Frame(scrollable_frame, height=2, bg='gray')
-        separator.pack(fill="x", padx=10, pady=10)
-        
-        graph_frame = tk.LabelFrame(scrollable_frame, text="Seleccionar Gráfica", 
-                                   font=("Arial", 12, "bold"), 
-                                   bg='white', padx=10, pady=10)
-        graph_frame.pack(fill="x", padx=10, pady=5)
-        self.create_graph_button(graph_frame, "Función Objetivo", "objective")
-        self.create_graph_button(graph_frame, "Evolución Mejor", "evolution_best")
-        self.create_graph_button(graph_frame, "Evolución Población", "evolution_all")
-        self.animation_btn = tk.Button(graph_frame, text="Evolución Animada", 
-                                     command=self.start_animation,
-                                     bg='white', relief='raised', bd=2,
-                                     font=("Arial", 11), height=2,
-                                     activebackground='#e0e0e0')
-        self.animation_btn.pack(fill="x", pady=5)
-        self.graph_buttons.append(self.animation_btn)
-        
-        actions_frame = tk.LabelFrame(scrollable_frame, text="Acciones", 
-                                     font=("Arial", 12, "bold"), 
-                                     bg='white', padx=10, pady=10)
-        actions_frame.pack(fill="x", padx=10, pady=5)
-        self.report_btn = tk.Button(actions_frame, text="Generar Reporte", 
-                                   command=self.generate_report,
-                                   bg='#FF9800', fg='white', 
-                                   font=("Arial", 11, "bold"), height=1)
-        self.report_btn.pack(fill="x", pady=5)
-        self.download_animation_btn = tk.Button(actions_frame, text="Descargar Animación", 
-                                             command=self.save_animation,
-                                             bg='#2196F3', fg='white', 
-                                             font=("Arial", 11, "bold"), height=1)
-        self.download_animation_btn.pack(fill="x", pady=5)
-        clear_btn = tk.Button(actions_frame, text="Limpiar Resultados", 
-                             command=self.clear_results,
-                             bg='#f44336', fg='white', 
-                             font=("Arial", 11, "bold"), height=1)
-        clear_btn.pack(fill="x", pady=5)
-        
-        self.disable_buttons()
-        for var in [self.interval_a, self.interval_b, self.delta_x]:
-            var.trace('w', lambda *args: self.update_calculated_values())
-    
-    def create_labeled_entry(self, parent, label, variable):
-        frame = tk.Frame(parent, bg='white')
-        frame.pack(fill="x", pady=2)
-        tk.Label(frame, text=label, bg='white', width=20, anchor="w").pack(side="left")
-        tk.Entry(frame, textvariable=variable, width=15).pack(side="right")
-    
-    def create_info_display(self, parent, label, variable):
-        frame = tk.Frame(parent, bg='white')
-        frame.pack(fill="x", pady=1)
-        tk.Label(frame, text=label, bg='white', width=15, anchor="w").pack(side="left")
-        info_label = tk.Label(frame, textvariable=variable, bg='#f0f0f0', 
-                             relief="sunken", bd=1, width=15)
-        info_label.pack(side="right")
+        editor = FunctionEditor(self)
 
-    def create_graph_button(self, parent, text, value):
-        btn = tk.Button(parent, text=text, 
-                       command=lambda: self.show_graph(value),
-                       bg='white', relief='raised', bd=2,
-                       font=("Arial", 11), height=2,
-                       activebackground='#e0e0e0')
-        btn.pack(fill="x", pady=5)
-        self.graph_buttons.append(btn)
+        if self.function_provider and self.function_provider.function_text:
+            editor.function_entry.setText(self.function_provider.function_text)
+        elif hasattr(editor, 'default_function'):
+             editor.function_entry.setText(editor.default_function)
+
+        def on_function_accept_wrapper(function_text, compiled_function):
+            if self.function_provider:
+                self.function_provider.set_function(function_text, compiled_function)
+                self.update_function_display()
+                QMessageBox.information(self, "Función Actualizada", "La función objetivo ha sido actualizada.")
+            else:
+                QMessageBox.warning(self, "Error", "Function provider no disponible.")
+
+        editor.callback_function = on_function_accept_wrapper
+        editor.exec()
+
+
+    def update_function_display(self):
+        if self.function_display_label and self.function_provider:
+            function_text = self.function_provider.function_text
+            display_text = function_text.replace('*', '·')
+            self.function_display_label.setText(f"f(x) = {display_text}")
+        elif not self.function_display_label:
+            print("Warning: functionDisplayLabel not found for update.")
+
 
     def update_calculated_values(self):
+        required_spinboxes = [self.interval_a_spinbox, self.interval_b_spinbox, self.delta_x_spinbox]
+        required_labels = [self.num_points_label, self.num_bits_label, self.max_decimal_label]
+
+        if not all(s for s in required_spinboxes) or not all(l for l in required_labels):
+            if self.num_points_label: self.num_points_label.setText("...")
+            if self.num_bits_label: self.num_bits_label.setText("...")
+            if self.max_decimal_label: self.max_decimal_label.setText("...")
+            return
+
         try:
-            try:
-                x_min = float(self.interval_a.get())
-                x_max = float(self.interval_b.get())
-                delta_x = float(self.delta_x.get())
-            except (ValueError, tk.TclError):
-                self.num_points.set("...")
-                self.num_bits.set("...")
-                self.max_decimal.set("...")
-                return
-            
+            x_min = self.interval_a_spinbox.value()
+            x_max = self.interval_b_spinbox.value()
+            delta_x = self.delta_x_spinbox.value()
+
             if x_max > x_min and delta_x > 0:
-                if x_min == 0 and x_max == 31:
+                n_bits = 0
+                if x_min == 0 and x_max == 31 and delta_x == 1.0:
                     n_bits = 5
                 elif x_min >= 0 and x_max == int(x_max) and delta_x == 1.0:
                     range_size = int(x_max - x_min) + 1
-                    n_bits = int(np.ceil(np.log2(range_size)))
+                    n_bits = (range_size -1 ).bit_length() if range_size > 0 else 0
                 else:
-                    num_divisions = int((x_max - x_min) / delta_x)
-                    n_bits = int(np.ceil(np.log2(num_divisions + 1)))
+                    num_divisions = int(np.round((x_max - x_min) / delta_x))
+                    n_bits = (num_divisions).bit_length() if num_divisions >= 0 else 0
                 
-                max_decimal = 2**n_bits - 1
+                if n_bits == 0 and ((x_max - x_min) > 0 or (x_min == x_max and delta_x > 0)):
+                    n_bits = max(1, n_bits)
+                if x_min == x_max and n_bits == 1 and delta_x > 0 : # Un solo punto, 0 bits es más correcto
+                    num_possible_points = int(np.round((x_max - x_min) / delta_x)) + 1
+                    if num_possible_points == 1:
+                        n_bits = 0
+
+                max_decimal = (2**n_bits - 1) if n_bits > 0 else 0
                 num_points = max_decimal + 1
-                
-                self.num_points.set(str(num_points))
-                self.num_bits.set(str(n_bits))
-                self.max_decimal.set(str(max_decimal))
+
+                self.num_points_label.setText(str(num_points))
+                self.num_bits_label.setText(str(n_bits))
+                self.max_decimal_label.setText(str(max_decimal))
             else:
-                self.num_points.set("...")
-                self.num_bits.set("...")
-                self.max_decimal.set("...")
+                self.num_points_label.setText("...")
+                self.num_bits_label.setText("...")
+                self.max_decimal_label.setText("...")
         except Exception as e:
-            self.num_points.set("...")
-            self.num_bits.set("...")
-            self.max_decimal.set("...")
+            print(f"Error in update_calculated_values: {e}")
+            import traceback
+            traceback.print_exc()
+            if self.num_points_label: self.num_points_label.setText("Error")
+            if self.num_bits_label: self.num_bits_label.setText("Error")
+            if self.max_decimal_label: self.max_decimal_label.setText("Error")
 
-    def enable_buttons(self):
-        for btn in self.graph_buttons:
-            btn.config(state="normal")
-        self.report_btn.config(state="normal")
-        self.download_animation_btn.config(state="normal")
 
-    def disable_buttons(self):
-        for btn in self.graph_buttons:
-            btn.config(state="disabled")
-        self.report_btn.config(state="disabled")
-        self.download_animation_btn.config(state="disabled")
-
-    def update_button_selection(self, selected_type):
-        button_mapping = {
-            "objective": 0,
-            "evolution_best": 1,
-            "evolution_all": 2
-        }
-        for i, btn in enumerate(self.graph_buttons[:-1]):
-            if i == button_mapping.get(selected_type, -1):
-                btn.config(bg='#cce0ff', relief='sunken')
-            else:
-                btn.config(bg='white', relief='raised')
-        self.animation_btn.config(text="Evolución Animada", bg='white')
-    
     def run_example_algorithm_from_config(self):
-        """Recoge los parámetros y solicita la ejecución del AG de ejemplo"""
-        x_min = self.interval_a.get()
-        x_max = self.interval_b.get()
-        delta_x = self.delta_x.get()
-        
-        if x_min >= x_max:
-            tk.messagebox.showerror("Error", "El intervalo [a,b] no es válido. a debe ser menor que b.")
+        required_widgets_for_run = [
+            self.interval_a_spinbox, self.interval_b_spinbox, self.delta_x_spinbox,
+            self.pop_size_spinbox, self.num_generations_spinbox, self.prob_crossover_spinbox,
+            self.prob_mutation_i_spinbox, self.prob_mutation_g_spinbox, self.minimize_radio
+        ]
+        if not all(w for w in required_widgets_for_run):
+            QMessageBox.critical(self, "Error de Configuración", "Faltan componentes de UI. Verifique objectNames en .ui y código.")
             return
-        if delta_x <= 0:
-            tk.messagebox.showerror("Error", "Δx debe ser mayor que 0.")
-            return
-        
+
         params = {
-            'interval_a': x_min, 'interval_b': x_max, 'delta_x': delta_x,
-            'pop_size': self.pop_size.get(), 
-            'num_generations': self.num_generations.get(),
-            'prob_crossover': self.prob_crossover.get(),
-            'prob_mutation_i': self.prob_mutation_i.get(),
-            'prob_mutation_g': self.prob_mutation_g.get(),
-            'is_minimizing': self.is_minimizing.get()
+            'interval_a': self.interval_a_spinbox.value(),
+            'interval_b': self.interval_b_spinbox.value(),
+            'delta_x': self.delta_x_spinbox.value(),
+            'pop_size': self.pop_size_spinbox.value(),
+            'num_generations': self.num_generations_spinbox.value(),
+            'prob_crossover': self.prob_crossover_spinbox.value(),
+            'prob_mutation_i': self.prob_mutation_i_spinbox.value(),
+            'prob_mutation_g': self.prob_mutation_g_spinbox.value(),
+            'is_minimizing': self.minimize_radio.isChecked() if self.minimize_radio else True
         }
-        self.main_window.run_example_algorithm(params)
-    
-    def show_graph(self, graph_type):
-        if not self.main_window.ga_results:
-            tk.messagebox.showwarning("Advertencia", "Primero debe ejecutar el AG de ejemplo o cargar resultados.")
+        if self.main_window:
+            self.main_window.run_example_algorithm(params)
+        else:
+            QMessageBox.critical(self, "Error Interno", "Referencia a MainWindow no encontrada.")
+
+
+    def show_graph_slot(self, graph_type: str):
+        if not self.main_window or not self.main_window.ga_results:
+            QMessageBox.warning(self, "Advertencia", "Primero debe ejecutar el algoritmo.")
             return
-        self.update_button_selection(graph_type)
-        self.main_window.visualization_panel.show_graph(
-            graph_type, 
-            self.main_window.ga_results, 
-            self.main_window.population_history, 
-            self.main_window.fitness_history, 
-            self.main_window.best_fitness_history
-        )
-    
-    def start_animation(self):
-        if not self.main_window.ga_results:
-            tk.messagebox.showwarning("Advertencia", "Primero debe ejecutar el AG de ejemplo o cargar resultados.")
+        self.update_graph_button_selection(graph_type)
+        if hasattr(self.main_window, 'visualization_panel') and self.main_window.visualization_panel:
+            self.main_window.visualization_panel.show_graph(
+                graph_type,
+                self.main_window.ga_results,
+                self.main_window.population_history,
+                self.main_window.fitness_history,
+                self.main_window.best_fitness_history
+            )
+
+    def start_animation_slot(self):
+        if not self.main_window or not self.main_window.ga_results:
+            QMessageBox.warning(self, "Advertencia", "Primero debe ejecutar el algoritmo.")
             return
-        if self.animation_btn.cget('text') == "Evolución Animada":
-            self.animation_btn.config(text="Detener Animación", bg='#ffcccc')
-            for btn in self.graph_buttons[:-1]:
-                btn.config(bg='white', relief='raised')
-            self.main_window.visualization_panel.start_animation(
+        
+        vis_panel = self.main_window.visualization_panel
+        if vis_panel and vis_panel.is_animating: # Verificar que vis_panel exista
+            if self.animatedEvolutionButton: self.animatedEvolutionButton.setText("Evolución Animada")
+            vis_panel.stop_animation()
+            self.update_graph_button_selection(None)
+        elif vis_panel: # Verificar que vis_panel exista
+            if self.animatedEvolutionButton: self.animatedEvolutionButton.setText("Detener Animación")
+            self.update_graph_button_selection("animation")
+            vis_panel.start_animation(
                 self.main_window.best_fitness_history,
                 self.main_window.ga_results['is_minimizing']
             )
-        else:
-            self.animation_btn.config(text="Evolución Animada", bg='white')
-            self.main_window.visualization_panel.stop_animation()
 
-    def generate_report(self):
-        filename = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            title="Guardar Reporte"
-        )
-        if not filename: return
-        success = self.main_window.generate_report(filename)
-        if success:
-            if hasattr(self.main_window.report_generator, 'open_file'):
-                self.main_window.report_generator.open_file(filename)
+    def generate_report_slot(self):
+        if self.main_window: self.main_window.generate_report()
+
+    def save_animation_slot(self):
+        if self.main_window: self.main_window.save_animation()
+
+    def clear_results_slot(self):
+        if self.main_window: self.main_window.clear_results()
+
+
+    def update_graph_button_selection(self, selected_type: str | None):
+        buttons_map = {
+            "objective": self.objectiveGraphButton,
+            "evolution_best": self.bestEvolutionGraphButton,
+            "evolution_all": self.allEvolutionGraphButton,
+        }
+        for graph_name, button_widget in buttons_map.items():
+            if button_widget:
+                is_selected = (graph_name == selected_type)
+                button_widget.setProperty("selected", is_selected)
+                button_widget.style().unpolish(button_widget)
+                button_widget.style().polish(button_widget)
+
+        if self.animatedEvolutionButton:
+            is_anim_selected = False
+            is_animating_now = False
+            if self.main_window and hasattr(self.main_window, 'visualization_panel') and self.main_window.visualization_panel:
+                is_animating_now = self.main_window.visualization_panel.is_animating
+
+            if selected_type == "animation" and not is_animating_now:
+                pass
+            elif not is_animating_now:
+                self.animatedEvolutionButton.setText("Evolución Animada")
+                self.animatedEvolutionButton.setProperty("selected", False)
             else:
-                try:
-                    import os, subprocess
-                    if os.name == 'nt': os.startfile(filename)
-                    else: subprocess.call(('open', filename) if os.uname().sysname == 'Darwin' else ('xdg-open', filename))
-                except Exception as e:
-                    messagebox.showwarning("Abrir archivo", f"No se pudo abrir el reporte automáticamente: {e}")
+                self.animatedEvolutionButton.setText("Detener Animación")
+                self.animatedEvolutionButton.setProperty("selected", True)
 
-    def save_animation(self):
-        filename = filedialog.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4 files", "*.mp4"), ("GIF files", "*.gif"), ("All files", "*.*")],
-            title="Guardar Animación"
-        )
-        if not filename: return
-        self.main_window.save_animation(filename)
+            self.animatedEvolutionButton.style().unpolish(self.animatedEvolutionButton)
+            self.animatedEvolutionButton.style().polish(self.animatedEvolutionButton)
 
-    def clear_results(self):
-        self.main_window.clear_results()
+
+    def enable_buttons(self):
+        has_results = self.main_window and hasattr(self.main_window, 'ga_results') and self.main_window.ga_results is not None
+
+        if self.execute_ag_btn: self.execute_ag_btn.setEnabled(True)
+        if self.editFunctionButton: self.editFunctionButton.setEnabled(True)
+
+        for btn in self.graph_buttons_list:
+            if btn: btn.setEnabled(has_results)
+        
+        if self.generateReportButton: self.generateReportButton.setEnabled(has_results)
+        if self.downloadAnimationButton: self.downloadAnimationButton.setEnabled(has_results)
+        if self.clearResultsButton: self.clearResultsButton.setEnabled(True)
+        
+        if has_results:
+            # No seleccionar nada por defecto aquí para evitar problemas de inicialización.
+            # La selección se manejará cuando el usuario haga clic o termine la animación.
+            pass 
+        else:
+             self.update_graph_button_selection(None)
+
+
+    def disable_buttons(self):
+        if self.execute_ag_btn: self.execute_ag_btn.setEnabled(True)
+        if self.editFunctionButton: self.editFunctionButton.setEnabled(True)
+
+        for btn in self.graph_buttons_list:
+            if btn: btn.setEnabled(False)
+        
+        if self.generateReportButton: self.generateReportButton.setEnabled(False)
+        if self.downloadAnimationButton: self.downloadAnimationButton.setEnabled(False)
+        if self.clearResultsButton: self.clearResultsButton.setEnabled(True) 
+        
+        self.update_graph_button_selection(None)
