@@ -120,7 +120,7 @@ class VisualizationPanel(QWidget):
                label=f'f(x) = {display_text}')
         ax.axvline(ga_results['best_x'], color='red', linestyle='--', 
                   linewidth=3, label=f'Mejor: x = {ga_results["best_x"]:.3f}')
-        ax.scatter([ga_results['best_x']], [ga_results['objective_function_raw']], 
+        ax.scatter([ga_results['best_x']], [ga_results['best_fitness']], 
                   color='red', s=200, zorder=5, 
                   label=f'f(x) = {ga_results["objective_function_raw"]:.3f}')
         
@@ -299,6 +299,9 @@ class VisualizationPanel(QWidget):
         """Ejecuta un paso de la animación"""
         if not self.is_animating or self.animation_generation >= len(self.anim_best_fitness_history):
             self.stop_animation()
+            # Notificar a ConfigPanel para resetear el botón
+            if self.main_window and hasattr(self.main_window, "config_panel") and self.main_window.config_panel:
+                self.main_window.config_panel.update_graph_button_selection(None)
             return
         
         # Actualizar datos

@@ -7,7 +7,7 @@
 Ventana principal de la aplicación - Visualizador de Resultados de AG (Versión PySide6)
 """
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QSplitter, QMessageBox, QVBoxLayout, QFileDialog, QProgressDialog
+from PySide6.QtWidgets import QMainWindow, QWidget, QSplitter, QMessageBox, QVBoxLayout, QFileDialog, QProgressDialog, QApplication
 from PySide6.QtCore import Qt, QUrl
 # from PySide6.QtGui import QDesktopServices # No se usa directamente aquí si open_file lo maneja
 
@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
                     elif not is_valid:
                         QMessageBox.critical(self, "Error de Función", "La función reportada por el AG no pudo ser validada por la UI.")
                 else:
-                     QMessageBox.warning(self, "Advertencia", "Editor de funciones no compatible para actualización automática.")
+                    QMessageBox.warning(self, "Advertencia", "Editor de funciones no compatible para actualización automática.")
 
             if self.config_panel: self.config_panel.enable_buttons()
             mode_text = "Minimización" if params['is_minimizing'] else "Maximización"
@@ -168,25 +168,42 @@ class MainWindow(QMainWindow):
         filename, selected_filter = QFileDialog.getSaveFileName(
             self, "Guardar Animación", "", "MP4 files (*.mp4);;GIF files (*.gif);;All files (*.*)"
         )
-        if not filename: return False
-
-        try:
-            # AnimationGenerator debe usar QMessageBox y QProgressDialog internamente
-            # o devolver un estado para que MainWindow lo maneje.
-            success = self.animation_generator.generate(
-                filename, self.best_fitness_history, self.ga_results['is_minimizing'], self
-            )
-            # Si AnimationGenerator no muestra su propio mensaje, hazlo aquí
-            # if success:
-            #     QMessageBox.information(self, "Animación Guardada", f"Animación guardada en:\n{filename}")
-            #     if QMessageBox.question(self, "Abrir Animación", "¿Desea abrir la animación generada?") == QMessageBox.Yes:
-            #         if not open_file(filename):
-            #             QMessageBox.warning(self, "Abrir Archivo", "No se pudo abrir el archivo automáticamente.")
-            return success
-        except Exception as e:
-            QMessageBox.critical(self, "Error de Animación", f"Error al generar la animación: {str(e)}")
+        if not filename:
             return False
-
+    
+        progress_dialog_anim = QProgressDialog("Generando Animación...", "Cancelar", 0, 0, self)
+        progress_dialog_anim.setWindowModality(Qt.WindowModal)
+        progress_dialog_anim.setWindowTitle("Procesando Animación")
+        progress_dialog_anim.show()
+        QApplication.processEvents()  # Asegura que el diálogo se muestre
+    
+        try:
+            # LLAMADA SIN EL 5to ARGUMENTO
+            result_info = self.animation_generator.generate(
+                filename,
+                self.best_fitness_history,
+                self.ga_results['is_minimizing']
+            )
+            progress_dialog_anim.close()
+    
+            if result_info and result_info.get("success"):
+                QMessageBox.information(self, "Animación Guardada", result_info.get("message", "Animación guardada."))
+                if QMessageBox.question(self, "Abrir Animación", "¿Desea abrir la animación generada?") == QMessageBox.Yes:
+                    from utils.helpers import open_file
+                    if not open_file(filename):
+                        QMessageBox.warning(self, "Abrir Archivo", "No se pudo abrir el archivo automáticamente.")
+                return True
+            elif result_info:
+                QMessageBox.critical(self, "Error de Animación", result_info.get("message", "Error desconocido al generar animación."))
+                return False
+            else:
+                QMessageBox.critical(self, "Error de Animación", "Error desconocido al generar animación.")
+                return False
+    
+        except Exception as e:
+            progress_dialog_anim.close()
+            QMessageBox.critical(self, "Error de Animación", f"Excepción al generar la animación: {str(e)}")
+            return False
 
     def clear_results(self):
         self.ga_results = None

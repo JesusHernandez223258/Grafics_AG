@@ -154,7 +154,8 @@ class ConfigPanel(QWidget):
 
         # Verificar que los widgets esenciales (del .ui original y los nuevos) fueron encontrados
         essential_widgets_map = {
-            "interval_a_spinbox": self.interval_a_spinbox, "interval_b_spinbox": self.interval_b_spinbox,
+            "interval_a_spinbox": self.interval_a_spinbox,
+            "interval_b_spinbox": self.interval_b_spinbox,
             "delta_x_spinbox": self.delta_x_spinbox, "pop_size_spinbox": self.pop_size_spinbox,
             "num_generations_spinbox": self.num_generations_spinbox,
             "prob_crossover_spinbox": self.prob_crossover_spinbox,
@@ -164,21 +165,20 @@ class ConfigPanel(QWidget):
             "num_points_label": self.num_points_label, "num_bits_label": self.num_bits_label,
             "max_decimal_label": self.max_decimal_label, "editFunctionButton": self.editFunctionButton,
             "execute_ag_btn": self.execute_ag_btn,
-            "objectiveGraphButton": self.objectiveGraphButton, # Nuevo
-            "generateReportButton": self.generateReportButton, # Nuevo
-            "clearResultsButton": self.clearResultsButton      # Nuevo
+            "objectiveGraphButton": self.objectiveGraphButton,
+            "generateReportButton": self.generateReportButton,
+            "clearResultsButton": self.clearResultsButton
         }
 
         all_essentials_found = True
         for name, widget_instance in essential_widgets_map.items():
             if not widget_instance:
-                print(f"CRITICAL WARNING: Widget '{name}' not found in config_panel.ui. Check objectName in Qt Designer or if it was added to the .ui file.")
+                print(f"CRITICAL ERROR: Widget '{name}' not found in config_panel.ui. Check objectName in Qt Designer.")
                 all_essentials_found = False
-        
+
         if not all_essentials_found:
-            QMessageBox.warning(self, "UI Incompleta", "Algunos componentes de la UI no se cargaron correctamente. La funcionalidad puede estar limitada.")
-            # Considerar retornar False si la UI es inutilizable sin estos.
-            # return False 
+            QMessageBox.critical(self, "UI Incompleta", "Faltan componentes críticos en la UI. Corrige el archivo .ui antes de continuar.")
+            raise RuntimeError("UI incompleta: faltan widgets críticos.")
             
         return True
 
@@ -352,14 +352,15 @@ class ConfigPanel(QWidget):
             is_animating_now = False
             if self.main_window and hasattr(self.main_window, 'visualization_panel') and self.main_window.visualization_panel:
                 is_animating_now = self.main_window.visualization_panel.is_animating
-            
-            is_anim_selected = (selected_type == "animation" or is_animating_now)
-            self.animatedEvolutionButton.setProperty("selected", is_anim_selected)
 
-            if is_animating_now:
-                 self.animatedEvolutionButton.setText("Detener Animación")
+            if selected_type == "animation" and not is_animating_now:
+                pass
+            elif not is_animating_now:
+                self.animatedEvolutionButton.setText("Evolución Animada")
+                self.animatedEvolutionButton.setProperty("selected", False)
             else:
-                 self.animatedEvolutionButton.setText("Evolución Animada")
+                self.animatedEvolutionButton.setText("Detener Animación")
+                self.animatedEvolutionButton.setProperty("selected", True)
 
             self.animatedEvolutionButton.style().unpolish(self.animatedEvolutionButton)
             self.animatedEvolutionButton.style().polish(self.animatedEvolutionButton)

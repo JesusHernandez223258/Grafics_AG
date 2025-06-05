@@ -11,7 +11,7 @@ from ui.main_window import MainWindow  # Debes crear esta versión Qt de tu vent
 
 from manager.ga_manager import get_ga_instance, get_available_ga_names
 
-SELECTED_GA_NAME = "example_ga"  # O "standard_ga" para probar el otro
+SELECTED_GA_NAME = "standard_ga"  # O "standard_ga" para probar el otro
 
 def execute_specific_ga(params: dict, root_qt_window=None, algorithm_name: str = SELECTED_GA_NAME):
     """
@@ -61,9 +61,9 @@ def main():
 
     if SELECTED_GA_NAME not in get_available_ga_names():
         print(f"Error: El AG '{SELECTED_GA_NAME}' no está registrado. Usando 'example_ga' por defecto.")
-        actual_ga_to_use = "example_ga"
-        if "example_ga" not in get_available_ga_names():
-            QMessageBox.critical(None, "Error Crítico", "No hay ningún AG 'example_ga' registrado. La aplicación no puede continuar.")
+        actual_ga_to_use = "standard_ga"
+        if "standard_ga" not in get_available_ga_names():
+            QMessageBox.critical(None, "Error Crítico", "No hay ningún AG 'standard_ga' registrado. La aplicación no puede continuar.")
             return
     else:
         actual_ga_to_use = SELECTED_GA_NAME
